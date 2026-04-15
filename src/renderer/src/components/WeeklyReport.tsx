@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import type { WeeklyReportData } from '../types'
@@ -8,7 +8,7 @@ interface WeeklyReportProps {
   onClose: () => void
 }
 
-type Tab = 'overview' | 'details' | 'markdown'
+type Tab = 'overview' | 'details' | 'report' | 'markdown'
 
 const CATEGORY_COLORS: Record<string, string> = {
   feature: '#3b82f6', // blue
@@ -195,6 +195,111 @@ function CategoryDonut({
   )
 }
 
+/**
+ * Build a plain-text formal work report from the structured data.
+ * Intended for copy-paste into Feishu / DingTalk / email when reporting
+ * upward to a manager. Sections are numbered with Chinese ordinals so the
+ * structure survives stripping markdown formatting.
+ */
+function buildReportText(report: WeeklyReportData): string {
+  const { stats, completedList, inProgressList, overdueList, highlights } = report
+  const lines: string[] = []
+
+  lines.push('本周工作汇报')
+  lines.push(`汇报周期：${report.weekStart} 至 ${report.weekEnd}`)
+  lines.push(`生成时间：${report.generatedAt.replace('T', ' ').slice(0, 16)}`)
+  lines.push('')
+
+  // 一、本周工作概况
+  lines.push('一、本周工作概况')
+  const overview = `本周累计完成任务 ${stats.completed} 项，推进中 ${stats.inProgress} 项，新增 ${stats.created} 项，完成率 ${stats.completionRate}%。`
+  lines.push('  ' + overview)
+  if (stats.avgDurationText && stats.avgDurationText !== '暂无') {
+    lines.push(`  任务平均耗时 ${stats.avgDurationText}。`)
+  }
+  if (stats.overdue > 0) {
+    lines.push(`  目前尚有 ${stats.overdue} 项任务逾期，需要重点关注。`)
+  }
+  lines.push('')
+
+  // 二、重点完成事项
+  lines.push('二、重点完成事项')
+  if (completedList.length === 0) {
+    lines.push('  本周暂无完成事项。')
+  } else {
+    completedList.forEach((t, i) => {
+      lines.push(`  ${i + 1}. ${t.title}（${t.categoryLabel}）`)
+      if (t.bugCause) lines.push(`     问题原因：${t.bugCause}`)
+      if (t.subtasksText) lines.push(`     具体进展：${t.subtasksText}`)
+    })
+  }
+  lines.push('')
+
+  // 三、正在推进工作
+  lines.push('三、正在推进工作')
+  if (inProgressList.length === 0) {
+    lines.push('  暂无进行中任务。')
+  } else {
+    inProgressList.forEach((t, i) => {
+      lines.push(`  ${i + 1}. ${t.title}（${t.categoryLabel}）`)
+      if (t.subtasksText) lines.push(`     当前进度：${t.subtasksText}`)
+    })
+  }
+  lines.push('')
+
+  // 四、风险与问题
+  lines.push('四、风险与问题')
+  if (overdueList.length === 0) {
+    lines.push('  本周无逾期或阻塞事项。')
+  } else {
+    overdueList.forEach((t, i) => {
+      lines.push(`  ${i + 1}. ${t.title}（原计划截止 ${t.dueDate}）`)
+    })
+  }
+  lines.push('')
+
+  // 五、下周工作计划
+  lines.push('五、下周工作计划')
+  const plans: string[] = []
+  if (inProgressList.length > 0) {
+    plans.push(`继续推进 ${inProgressList.length} 项进行中任务`)
+  }
+  if (overdueList.length > 0) {
+    plans.push(`优先解决 ${overdueList.length} 项逾期任务`)
+  }
+  plans.push('根据实际需要新增任务安排')
+  plans.forEach((p, i) => lines.push(`  ${i + 1}. ${p}`))
+  lines.push('')
+
+  // 六、本周小结
+  lines.push('六、本周小结')
+  if (highlights.length === 0) {
+    lines.push('  本周工作平稳推进。')
+  } else {
+    highlights.forEach((h) => lines.push(`  - ${h}`))
+  }
+
+  return lines.join('\n')
+}
+
+/** Numbered section block used in the 汇报 tab. */
+function ReportSection({
+  title,
+  children
+}: {
+  title: string
+  children: ReactNode
+}): JSX.Element {
+  return (
+    <section className="mb-5">
+      <h2 className="text-[13px] font-semibold text-zinc-900 dark:text-zinc-100 mb-2 pb-1 border-b border-zinc-200 dark:border-zinc-800">
+        {title}
+      </h2>
+      <div className="pl-1 text-zinc-700 dark:text-zinc-300">{children}</div>
+    </section>
+  )
+}
+
 /** Section header with icon + title + count. */
 function SectionHeader({
   icon,
@@ -223,13 +328,16 @@ export default function WeeklyReport({ report, onClose }: WeeklyReportProps): JS
   const [tab, setTab] = useState<Tab>('overview')
 
   const handleCopy = async (): Promise<void> => {
+    // Tab-aware: on the 汇报 tab copy the formal report text so users can
+    // paste straight into Feishu/email; elsewhere copy raw markdown.
+    const textToCopy = tab === 'report' ? buildReportText(report) : report.markdown
     try {
-      await navigator.clipboard.writeText(report.markdown)
+      await navigator.clipboard.writeText(textToCopy)
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)
     } catch {
       const textarea = document.createElement('textarea')
-      textarea.value = report.markdown
+      textarea.value = textToCopy
       document.body.appendChild(textarea)
       textarea.select()
       document.execCommand('copy')
@@ -260,7 +368,7 @@ export default function WeeklyReport({ report, onClose }: WeeklyReportProps): JS
               onClick={handleCopy}
               className="px-2.5 py-1 text-[10px] rounded border border-zinc-300 dark:border-zinc-700 text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:border-zinc-400 dark:hover:border-zinc-500 transition-colors"
             >
-              {copied ? '✓ 已复制' : '复制 Markdown'}
+              {copied ? '✓ 已复制' : tab === 'report' ? '复制汇报' : '复制 Markdown'}
             </button>
             <button
               onClick={onClose}
@@ -277,6 +385,7 @@ export default function WeeklyReport({ report, onClose }: WeeklyReportProps): JS
             [
               ['overview', '总览'],
               ['details', '详情'],
+              ['report', '汇报'],
               ['markdown', 'Markdown']
             ] as const
           ).map(([key, label]) => (
@@ -489,6 +598,148 @@ export default function WeeklyReport({ report, onClose }: WeeklyReportProps): JS
                 )}
               </div>
             </div>
+          )}
+
+          {tab === 'report' && (
+            <article className="max-w-[640px] mx-auto text-[12px] leading-[1.85] text-zinc-800 dark:text-zinc-200">
+              {/* Report header */}
+              <header className="text-center mb-5 pb-3 border-b border-zinc-200 dark:border-zinc-800">
+                <h1 className="text-base font-bold mb-1 text-zinc-900 dark:text-zinc-100">
+                  本周工作汇报
+                </h1>
+                <div className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                  汇报周期：{report.weekStart} 至 {report.weekEnd}
+                </div>
+                <div className="text-[10px] text-zinc-400 dark:text-zinc-500 mt-0.5">
+                  生成时间：{report.generatedAt.replace('T', ' ').slice(0, 16)}
+                </div>
+              </header>
+
+              {/* 一、本周工作概况 */}
+              <ReportSection title="一、本周工作概况">
+                <p>
+                  本周累计完成任务{' '}
+                  <strong className="text-emerald-600 dark:text-emerald-400">
+                    {stats.completed}
+                  </strong>{' '}
+                  项，推进中 <strong>{stats.inProgress}</strong> 项，新增{' '}
+                  <strong>{stats.created}</strong> 项，完成率{' '}
+                  <strong>{stats.completionRate}%</strong>。
+                  {stats.avgDurationText && stats.avgDurationText !== '暂无' && (
+                    <>
+                      {' '}
+                      任务平均耗时 <strong>{stats.avgDurationText}</strong>。
+                    </>
+                  )}
+                </p>
+                {stats.overdue > 0 && (
+                  <p className="text-amber-700 dark:text-amber-400 mt-1.5">
+                    目前尚有 <strong>{stats.overdue}</strong> 项任务逾期，需要重点关注。
+                  </p>
+                )}
+              </ReportSection>
+
+              {/* 二、重点完成事项 */}
+              <ReportSection title="二、重点完成事项">
+                {report.completedList.length === 0 ? (
+                  <p className="text-zinc-400 dark:text-zinc-500 italic">本周暂无完成事项。</p>
+                ) : (
+                  <ol className="space-y-2 list-decimal list-inside marker:text-zinc-400">
+                    {report.completedList.map((t, i) => (
+                      <li key={i}>
+                        <span className="font-medium">{t.title}</span>
+                        <span className="text-zinc-500 dark:text-zinc-400 ml-1 text-[11px]">
+                          ({t.categoryLabel})
+                        </span>
+                        {t.bugCause && (
+                          <div className="ml-5 mt-0.5 text-[11px] text-zinc-600 dark:text-zinc-400">
+                            问题原因：{t.bugCause}
+                          </div>
+                        )}
+                        {t.subtasksText && (
+                          <div className="ml-5 mt-0.5 text-[11px] text-zinc-600 dark:text-zinc-400">
+                            具体进展：{t.subtasksText}
+                          </div>
+                        )}
+                      </li>
+                    ))}
+                  </ol>
+                )}
+              </ReportSection>
+
+              {/* 三、正在推进工作 */}
+              <ReportSection title="三、正在推进工作">
+                {report.inProgressList.length === 0 ? (
+                  <p className="text-zinc-400 dark:text-zinc-500 italic">暂无进行中任务。</p>
+                ) : (
+                  <ol className="space-y-2 list-decimal list-inside marker:text-zinc-400">
+                    {report.inProgressList.map((t, i) => (
+                      <li key={i}>
+                        <span className="font-medium">{t.title}</span>
+                        <span className="text-zinc-500 dark:text-zinc-400 ml-1 text-[11px]">
+                          ({t.categoryLabel})
+                        </span>
+                        {t.subtasksText && (
+                          <div className="ml-5 mt-0.5 text-[11px] text-zinc-600 dark:text-zinc-400">
+                            当前进度：{t.subtasksText}
+                          </div>
+                        )}
+                      </li>
+                    ))}
+                  </ol>
+                )}
+              </ReportSection>
+
+              {/* 四、风险与问题 */}
+              <ReportSection title="四、风险与问题">
+                {report.overdueList.length === 0 ? (
+                  <p className="text-zinc-400 dark:text-zinc-500 italic">
+                    本周无逾期或阻塞事项。
+                  </p>
+                ) : (
+                  <ol className="space-y-1.5 list-decimal list-inside marker:text-amber-500 text-amber-700 dark:text-amber-400">
+                    {report.overdueList.map((t, i) => (
+                      <li key={i}>
+                        <span className="font-medium">{t.title}</span>
+                        <span className="text-[11px] ml-1">
+                          （原计划截止 {t.dueDate}）
+                        </span>
+                      </li>
+                    ))}
+                  </ol>
+                )}
+              </ReportSection>
+
+              {/* 五、下周工作计划 */}
+              <ReportSection title="五、下周工作计划">
+                <ol className="space-y-1 list-decimal list-inside marker:text-zinc-400">
+                  {report.inProgressList.length > 0 && (
+                    <li>
+                      继续推进 <strong>{report.inProgressList.length}</strong> 项进行中任务
+                    </li>
+                  )}
+                  {report.overdueList.length > 0 && (
+                    <li>
+                      优先解决 <strong>{report.overdueList.length}</strong> 项逾期任务
+                    </li>
+                  )}
+                  <li>根据实际需要新增任务安排</li>
+                </ol>
+              </ReportSection>
+
+              {/* 六、本周小结 */}
+              <ReportSection title="六、本周小结">
+                {highlights.length === 0 ? (
+                  <p>本周工作平稳推进。</p>
+                ) : (
+                  <ul className="space-y-1 list-disc list-inside marker:text-amber-500">
+                    {highlights.map((h, i) => (
+                      <li key={i}>{h}</li>
+                    ))}
+                  </ul>
+                )}
+              </ReportSection>
+            </article>
           )}
 
           {tab === 'markdown' && (
