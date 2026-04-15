@@ -1,0 +1,58 @@
+{
+  "name": "todo-desktop",
+  "version": "1.0.0",
+  "description": "Desktop Todo List Widget",
+  "author": "jiangzhe",
+  "main": "./out/main/index.js",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "preview": "electron-vite preview",
+    "build:unpack": "yarn build && electron-builder --dir",
+    "build:mac": "yarn build && electron-builder --mac"
+  },
+  "dependencies": {
+    "@dnd-kit/core": "^6.3.1",
+    "@dnd-kit/sortable": "^10.0.0",
+    "@dnd-kit/utilities": "^3.2.2",
+    "date-fns": "^4.1.0",
+    "electron-store": "^10.0.0",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1",
+    "uuid": "^11.1.0",
+    "zustand": "^5.0.2"
+  },
+  "devDependencies": {
+    "@electron-toolkit/preload": "^3.0.1",
+    "@electron-toolkit/utils": "^4.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@types/uuid": "^10.0.0",
+    "@vitejs/plugin-react": "^4.3.4",
+    "autoprefixer": "^10.4.20",
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8",
+    "electron-vite": "^3.0.0",
+    "postcss": "^8.5.1",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "tailwindcss": "^3.4.17",
+    "typescript": "^5.7.3",
+    "vite": "^6.0.0"
+  },
+  "build": {
+    "appId": "com.todo-desktop",
+    "productName": "Todo Desktop",
+    "electronVersion": "33.4.11",
+    "mac": {
+      "target": "dir",
+      "icon": "resources/icon.icns"
+    },
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "out/**/*"
+    ]
+  }
+}
