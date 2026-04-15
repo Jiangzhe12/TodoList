@@ -30,7 +30,7 @@ export default function App(): JSX.Element {
   const [showArchive, setShowArchive] = useState(false)
   const [showTemplates, setShowTemplates] = useState(false)
   const [showCalendar, setShowCalendar] = useState(false)
-  const [weeklyReport, setWeeklyReport] = useState<string | null>(null)
+  const [weeklyReport, setWeeklyReport] = useState<import('./types').WeeklyReportData | null>(null)
   const lastDateRef = useRef(getToday())
   const searchInputRef = useRef<HTMLInputElement | null>(null)
 
@@ -78,7 +78,7 @@ export default function App(): JSX.Element {
 
   // Listen for weekly report from main process
   useEffect(() => {
-    const cleanup = window.api.onWeeklyReport((_event: unknown, report: string) => {
+    const cleanup = window.api.onWeeklyReport((_event, report) => {
       setWeeklyReport(report)
     })
     return cleanup

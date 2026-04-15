@@ -156,15 +156,27 @@ export const useTodoStore = create<TodoStore>((set, get) => ({
       const raw = (await window.api.getStoreData()) as unknown as AppData | undefined
       if (raw && raw.todos) {
         const today = getToday()
-        // Backfill fields for old data
-        const todosWithOrder = raw.todos.map((t, i) => ({
-          ...t,
-          order: t.order ?? i,
-          priority: t.priority ?? 'medium'
-        } as Todo))
+        // Backfill fields for old data:
+        // - order / priority defaults
+        // - completedAt for done tasks missing the timestamp (use updatedAt as
+        //   best-effort fallback) — fixes old data where toggleStatus cleared
+        //   completedAt when cycling off done, hiding tasks from weekly reports.
+        let needsMigrationSave = false
+        const todosWithOrder = raw.todos.map((t, i) => {
+          const base = {
+            ...t,
+            order: t.order ?? i,
+            priority: t.priority ?? 'medium'
+          } as Todo
+          if (base.status === 'done' && !base.completedAt) {
+            needsMigrationSave = true
+            base.completedAt = base.updatedAt || base.createdAt
+          }
+          return base
+        })
         const carried = carryOverTodos(todosWithOrder, raw.lastOpenDate || today)
         set({ todos: carried, lastOpenDate: today, loaded: true, customTags: raw.customTags || [], templates: raw.templates || [] })
-        if (raw.lastOpenDate !== today) {
+        if (raw.lastOpenDate !== today || needsMigrationSave) {
           await get().saveToDisk()
         }
       } else {
@@ -230,7 +242,13 @@ export const useTodoStore = create<TodoStore>((set, get) => ({
             changelog = appendChangeLog(changelog, field, String(t[field] ?? ''), String(patch[field] ?? ''))
           }
         }
-        return { ...t, ...patch, changelog, updatedAt: new Date().toISOString() }
+        // Set completedAt on first transition to 'done'; preserve historical record if already set.
+        // Never clear completedAt — once a task has been completed, keep the timestamp
+        // so weekly reports can still count it even if the user later reopens it.
+        const now = new Date().toISOString()
+        const willBeDone = 'status' in patch ? patch.status === 'done' : t.status === 'done'
+        const completedAt = willBeDone ? (t.completedAt ?? now) : t.completedAt
+        return { ...t, ...patch, completedAt, changelog, updatedAt: now }
       })
     }))
     debouncedSave(get().saveToDisk)
@@ -273,11 +291,15 @@ export const useTodoStore = create<TodoStore>((set, get) => ({
         const newStatus = statusCycle[t.status]
         const now = new Date().toISOString()
         const changelog = appendChangeLog(t.changelog, 'status', statusLabels[t.status], statusLabels[newStatus])
+        // Preserve completedAt: set on first transition to done, keep historical
+        // timestamp even if user cycles back to pending. Prevents weekly-report
+        // data loss when a task is accidentally re-toggled.
+        const completedAt = newStatus === 'done' ? (t.completedAt ?? now) : t.completedAt
         return {
           ...t,
           status: newStatus,
           updatedAt: now,
-          completedAt: newStatus === 'done' ? now : undefined,
+          completedAt,
           changelog
         }
       })
@@ -312,6 +334,7 @@ export const useTodoStore = create<TodoStore>((set, get) => ({
                 ...t,
                 status: 'done' as TodoStatus,
                 convertedToOptimizationId: optimizationTodo.id,
+                completedAt: t.completedAt ?? now,
                 updatedAt: now
               }
             : t

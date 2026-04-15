@@ -69,6 +69,42 @@ export function isBugTodo(todo: Todo): todo is BugTodo {
   return todo.category === 'bug'
 }
 
+// Rich weekly-report payload from main process. Renderer uses this to render
+// stats cards, charts, and detail lists. `markdown` is kept for copy-to-clipboard.
+export interface WeeklyReportData {
+  weekStart: string
+  weekEnd: string
+  generatedAt: string
+  stats: {
+    completed: number
+    created: number
+    inProgress: number
+    overdue: number
+    completionRate: number
+    avgDurationText: string
+  }
+  dailyCompletion: Array<{ day: string; count: number; isToday: boolean }>
+  byCategory: Array<{ key: string; label: string; count: number }>
+  completedList: Array<{
+    title: string
+    category: string
+    categoryLabel: string
+    bugCause?: string
+    subtasksText?: string
+    completedAt: string
+  }>
+  inProgressList: Array<{
+    title: string
+    category: string
+    categoryLabel: string
+    subtasksText?: string
+  }>
+  createdList: Array<{ title: string; category: string; categoryLabel: string }>
+  overdueList: Array<{ title: string; dueDate: string }>
+  highlights: string[]
+  markdown: string
+}
+
 // Window API exposed by preload
 declare global {
   interface Window {
@@ -80,7 +116,9 @@ declare global {
       toggleAlwaysOnTop: () => void
       isAlwaysOnTop: () => Promise<boolean>
       onQuickAdd: (callback: () => void) => () => void
-      onWeeklyReport: (callback: (_event: unknown, report: string) => void) => () => void
+      onWeeklyReport: (
+        callback: (_event: unknown, report: WeeklyReportData) => void
+      ) => () => void
       requestWeeklyReport: () => void
     }
   }
