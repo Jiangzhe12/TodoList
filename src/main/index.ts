@@ -7,7 +7,7 @@ const store = new Store({ name: 'todo-data' })
 
 let mainWindow: BrowserWindow | null = null
 let tray: Tray | null = null
-let isPinned = true // true = screen-saver level, false = floating level
+let isPinned = true // true = floating level (above normal windows, below IME popup), false = sunk to bottom on blur
 
 function createWindow(): void {
   mainWindow = new BrowserWindow({
@@ -29,14 +29,18 @@ function createWindow(): void {
     }
   })
 
-  // Set initial always-on-top level: pinned = screen-saver (highest)
-  mainWindow.setAlwaysOnTop(true, 'screen-saver')
+  // Set initial always-on-top level: pinned = floating.
+  // NOTE: do not use 'screen-saver' — it sits above macOS IME candidate
+  // windows, which makes Chinese/Japanese input suggestions appear hidden
+  // behind this app. 'floating' keeps us above normal windows while still
+  // letting system UI (IME popup, context menus) render on top.
+  mainWindow.setAlwaysOnTop(true, 'floating')
   isPinned = true
 
   // Z-axis behavior: focus → top, blur + unpinned → bottom
   mainWindow.on('focus', () => {
     if (!isPinned && mainWindow) {
-      mainWindow.setAlwaysOnTop(true, 'screen-saver')
+      mainWindow.setAlwaysOnTop(true, 'floating')
     }
   })
   mainWindow.on('blur', () => {
@@ -90,7 +94,7 @@ function createTray(): void {
         isPinned = menuItem.checked
         if (mainWindow) {
           if (isPinned) {
-            mainWindow.setAlwaysOnTop(true, 'screen-saver')
+            mainWindow.setAlwaysOnTop(true, 'floating')
           } else if (!mainWindow.isFocused()) {
             mainWindow.setAlwaysOnTop(true, 'normal', -1)
           }
@@ -139,7 +143,7 @@ ipcMain.on('window:toggle-always-on-top', () => {
   if (mainWindow) {
     isPinned = !isPinned
     if (isPinned) {
-      mainWindow.setAlwaysOnTop(true, 'screen-saver')
+      mainWindow.setAlwaysOnTop(true, 'floating')
     } else if (!mainWindow.isFocused()) {
       // Unpinned + no focus → sink to bottom
       mainWindow.setAlwaysOnTop(true, 'normal', -1)
