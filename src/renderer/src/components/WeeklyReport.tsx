@@ -257,9 +257,10 @@ function generateReportDraft(report: WeeklyReportData): string {
 }
 
 /**
- * Editable notepad for the 汇报 tab. Auto-generates a draft from report
- * data; the user can freely edit and save. Once saved, the saved version
- * loads instead of re-generating. "重新生成" regenerates from latest data.
+ * Editable notepad for the 汇报 tab — "Night Desk" aesthetic.
+ * A warm-tinted editorial card floating on the dark app surface, with a
+ * header stats strip, left accent bar, frosted-glass status badge, icon
+ * buttons, and a monospace edit area that auto-resizes.
  */
 function ReportEditor({ report }: { report: WeeklyReportData }): JSX.Element {
   const savedReports = useTodoStore((s) => s.savedReports)
@@ -312,55 +313,105 @@ function ReportEditor({ report }: { report: WeeklyReportData }): JSX.Element {
     setTimeout(() => setJustCopied(false), 2000)
   }
 
-  // Status badge
+  // Status badge styling
   let statusLabel: string
-  let statusColor: string
+  let statusDot: string
+  let statusText: string
   if (justSaved) {
-    statusLabel = '已保存 ✓'
-    statusColor = 'text-emerald-500'
+    statusLabel = '已保存'
+    statusDot = 'bg-emerald-400'
+    statusText = 'text-emerald-600 dark:text-emerald-400'
   } else if (hasSaved && !isModified) {
     statusLabel = '已保存'
-    statusColor = 'text-emerald-500 dark:text-emerald-400'
+    statusDot = 'bg-emerald-400'
+    statusText = 'text-emerald-600 dark:text-emerald-400'
   } else if (isModified) {
     statusLabel = '未保存'
-    statusColor = 'text-amber-500 dark:text-amber-400'
+    statusDot = 'bg-amber-400 animate-pulse'
+    statusText = 'text-amber-600 dark:text-amber-400'
   } else {
     statusLabel = '自动生成'
-    statusColor = 'text-zinc-400 dark:text-zinc-500'
+    statusDot = 'bg-zinc-300 dark:bg-zinc-600'
+    statusText = 'text-zinc-400 dark:text-zinc-500'
   }
 
+  const { stats } = report
+
+  // Inline SVG icon components (tiny, no extra deps)
+  const IconRefresh = (
+    <svg className="w-3 h-3 group-hover:rotate-[-180deg] transition-transform duration-500" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M2.5 8a5.5 5.5 0 019.62-3.6M13.5 8a5.5 5.5 0 01-9.62 3.6" />
+      <path d="M12.5 1.5v3h-3M3.5 14.5v-3h3" />
+    </svg>
+  )
+  const IconCheck = (
+    <svg className="w-3 h-3" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M13 4.5l-6.5 7L3 8" />
+    </svg>
+  )
+  const IconCopy = (
+    <svg className="w-3 h-3" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="5.5" y="5.5" width="7.5" height="7.5" rx="1.5" />
+      <path d="M3.5 10.5V4a1.5 1.5 0 011.5-1.5H11" />
+    </svg>
+  )
+
+  const statItems = [
+    { label: '完成', value: stats.completed, color: 'text-emerald-600 dark:text-emerald-400' },
+    { label: '进行中', value: stats.inProgress, color: 'text-blue-600 dark:text-blue-400' },
+    { label: '逾期', value: stats.overdue, color: stats.overdue > 0 ? 'text-red-500 dark:text-red-400' : 'text-zinc-400 dark:text-zinc-500' },
+    { label: '完成率', value: `${stats.completionRate}%`, color: 'text-amber-600 dark:text-amber-400' }
+  ]
+
   return (
-    <div className="flex flex-col gap-3">
-      {/* Toolbar */}
-      <div className="flex items-center justify-between">
-        <span className={`text-[10px] font-medium ${statusColor} transition-colors`}>
-          {statusLabel}
-        </span>
-        <div className="flex items-center gap-1.5">
-          <button
-            onClick={handleReset}
-            className="px-2 py-1 text-[10px] rounded text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
-          >
-            重新生成
-          </button>
-          <button
-            onClick={handleSave}
-            disabled={!isModified && hasSaved}
-            className="px-2.5 py-1 text-[10px] rounded font-medium bg-blue-500/10 text-blue-600 dark:text-blue-400 hover:bg-blue-500/20 disabled:opacity-40 disabled:cursor-default transition-colors"
-          >
-            保存
-          </button>
-          <button
-            onClick={handleEditorCopy}
-            className="px-2.5 py-1 text-[10px] rounded border border-zinc-300 dark:border-zinc-700 text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:border-zinc-400 dark:hover:border-zinc-500 transition-colors"
-          >
-            {justCopied ? '✓ 已复制' : '复制'}
-          </button>
+    <div className="space-y-3">
+      {/* ─── Header card with warm gradient and compact stats ─── */}
+      <div className="relative overflow-hidden rounded-xl bg-gradient-to-br from-amber-50/90 via-orange-50/40 to-amber-100/30 dark:from-amber-950/25 dark:via-zinc-800/60 dark:to-zinc-800/40 border border-amber-200/40 dark:border-amber-700/15 p-4 pb-3">
+        {/* Decorative glow */}
+        <div className="absolute -top-12 -right-12 w-36 h-36 rounded-full bg-gradient-to-br from-amber-200/40 to-transparent dark:from-amber-600/8 blur-2xl pointer-events-none" />
+
+        <div className="relative flex items-start justify-between">
+          {/* Title */}
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <div className="w-1 h-4 rounded-full bg-gradient-to-b from-amber-400 to-orange-500 dark:from-amber-400 dark:to-orange-600" />
+              <h3 className="text-sm font-semibold text-zinc-800 dark:text-zinc-100 tracking-tight">
+                周工作汇报
+              </h3>
+            </div>
+            <p className="text-[11px] text-zinc-500 dark:text-zinc-400 ml-3 tracking-wide">
+              {report.weekStart} — {report.weekEnd}
+            </p>
+          </div>
+          {/* Frosted-glass status pill */}
+          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/60 dark:bg-zinc-900/50 backdrop-blur-sm border border-white/40 dark:border-zinc-700/40 shadow-sm">
+            <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${statusDot} transition-colors`} />
+            <span className={`text-[10px] font-medium leading-none ${statusText} transition-colors`}>
+              {statusLabel}
+            </span>
+          </div>
+        </div>
+
+        {/* Stats row */}
+        <div className="flex items-center gap-4 mt-3 ml-3">
+          {statItems.map((s, i) => (
+            <div key={i} className="flex items-baseline gap-1">
+              <span className={`text-sm font-bold tabular-nums leading-none ${s.color}`}>
+                {s.value}
+              </span>
+              <span className="text-[9px] text-zinc-400 dark:text-zinc-500 uppercase tracking-wider">
+                {s.label}
+              </span>
+            </div>
+          ))}
         </div>
       </div>
 
-      {/* Editor area — monospace, warm bg, auto-resize */}
-      <div className="rounded-lg bg-amber-50/40 dark:bg-zinc-800/50 border border-amber-200/30 dark:border-zinc-700/50 overflow-hidden shadow-sm">
+      {/* ─── Editor card ─── */}
+      <div className="relative rounded-xl overflow-hidden border border-zinc-200/50 dark:border-zinc-700/30 shadow-sm">
+        {/* Left accent bar */}
+        <div className="absolute left-0 top-0 bottom-0 w-[3px] bg-gradient-to-b from-amber-400 via-orange-400/60 to-amber-300/0 dark:from-amber-500 dark:via-amber-600/40 dark:to-transparent" />
+
         <textarea
           ref={textareaRef}
           value={text}
@@ -369,15 +420,57 @@ function ReportEditor({ report }: { report: WeeklyReportData }): JSX.Element {
             setJustSaved(false)
           }}
           spellCheck={false}
-          className="w-full min-h-[260px] px-4 py-3 bg-transparent text-[12px] leading-relaxed text-zinc-800 dark:text-zinc-200 placeholder-zinc-400 dark:placeholder-zinc-500 resize-none outline-none"
-          style={{ fontFamily: "Menlo, 'SF Mono', 'Fira Code', monospace" }}
+          className="w-full min-h-[280px] pl-5 pr-4 py-4 bg-white/70 dark:bg-zinc-800/40 text-[12px] text-zinc-700 dark:text-zinc-200 placeholder-zinc-300 dark:placeholder-zinc-600 resize-none outline-none selection:bg-amber-200/40 dark:selection:bg-amber-500/20"
+          style={{
+            fontFamily: "Menlo, 'SF Mono', 'Fira Code', 'Cascadia Code', monospace",
+            lineHeight: '1.85'
+          }}
           placeholder="写点什么..."
         />
       </div>
 
-      <p className="text-[10px] text-zinc-400 dark:text-zinc-500 leading-relaxed">
-        自由编辑内容，保存后下次打开会保留你改过的版本。点「重新生成」用最新数据覆盖。
-      </p>
+      {/* ─── Action bar ─── */}
+      <div className="flex items-center justify-between">
+        <p className="text-[10px] text-zinc-400 dark:text-zinc-500 italic">
+          编辑后保存 · 下次打开保留你的版本
+        </p>
+        <div className="flex items-center gap-1.5">
+          {/* Reset */}
+          <button
+            onClick={handleReset}
+            className="group flex items-center gap-1 px-2.5 py-1.5 text-[10px] rounded-lg text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 active:scale-[0.96] transition-all duration-200"
+          >
+            {IconRefresh}
+            <span>重新生成</span>
+          </button>
+          {/* Save */}
+          <button
+            onClick={handleSave}
+            disabled={!isModified && hasSaved}
+            className="flex items-center gap-1 px-3 py-1.5 text-[10px] font-medium rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400 hover:bg-amber-500/20 active:scale-[0.96] disabled:opacity-30 disabled:cursor-default transition-all duration-200"
+          >
+            {IconCheck}
+            <span>保存</span>
+          </button>
+          {/* Copy */}
+          <button
+            onClick={handleEditorCopy}
+            className="flex items-center gap-1 px-3 py-1.5 text-[10px] font-medium rounded-lg border border-zinc-200 dark:border-zinc-700 text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:border-zinc-300 dark:hover:border-zinc-500 active:scale-[0.96] transition-all duration-200"
+          >
+            {justCopied ? (
+              <>
+                <svg className="w-3 h-3 text-emerald-500" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M13 4.5l-6.5 7L3 8" /></svg>
+                <span className="text-emerald-500">已复制</span>
+              </>
+            ) : (
+              <>
+                {IconCopy}
+                <span>复制</span>
+              </>
+            )}
+          </button>
+        </div>
+      </div>
     </div>
   )
 }
