@@ -60,6 +60,7 @@ export interface AppData {
   lastOpenDate: string
   customTags?: string[]
   templates?: TodoTemplate[]
+  savedReports?: Record<string, string> // key = weekStart, value = user-edited report text
 }
 
 export type FilterCategory = TodoCategory | 'all'

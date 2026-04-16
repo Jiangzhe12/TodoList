@@ -549,19 +549,21 @@ function generateWeeklyReport(): WeeklyReportData {
   return result
 }
 
-// Weekly report: check every minute if it's Friday 17:00
+// Weekly report: check every minute if it's Friday 14:00
+// The user asked to be reminded at Friday 2 PM to review their weekly report
+// before submitting it to their manager.
 let lastReportDate = ''
 function checkWeeklyReport(): void {
   const now = new Date()
   const todayStr = fmtDate(now)
-  if (now.getDay() === 5 && now.getHours() === 17 && lastReportDate !== todayStr) {
+  if (now.getDay() === 5 && now.getHours() === 14 && lastReportDate !== todayStr) {
     lastReportDate = todayStr
     const report = generateWeeklyReport()
     if (mainWindow) {
       mainWindow.webContents.send('report:ready', report)
       new Notification({
-        title: '周报已生成',
-        body: '点击查看本周工作总结'
+        title: '周五了，该复盘周报了',
+        body: '回顾本周工作，整理汇报内容'
       }).show()
       mainWindow.show()
     }

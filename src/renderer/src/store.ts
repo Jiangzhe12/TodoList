@@ -80,6 +80,11 @@ interface TodoStore {
   deleteTemplate: (id: string) => void
   createFromTemplate: (templateId: string) => void
 
+  // Saved weekly reports (user-edited text keyed by weekStart)
+  savedReports: Record<string, string>
+  saveWeeklyReport: (weekStart: string, text: string) => void
+  clearSavedReport: (weekStart: string) => void
+
   // Focus (keyboard navigation)
   focusedTodoId: string | null
   setFocusedTodo: (id: string | null) => void
@@ -175,7 +180,7 @@ export const useTodoStore = create<TodoStore>((set, get) => ({
           return base
         })
         const carried = carryOverTodos(todosWithOrder, raw.lastOpenDate || today)
-        set({ todos: carried, lastOpenDate: today, loaded: true, customTags: raw.customTags || [], templates: raw.templates || [] })
+        set({ todos: carried, lastOpenDate: today, loaded: true, customTags: raw.customTags || [], templates: raw.templates || [], savedReports: raw.savedReports || {} })
         if (raw.lastOpenDate !== today || needsMigrationSave) {
           await get().saveToDisk()
         }
@@ -188,12 +193,13 @@ export const useTodoStore = create<TodoStore>((set, get) => ({
   },
 
   saveToDisk: async () => {
-    const { todos, lastOpenDate, customTags, templates } = get()
+    const { todos, lastOpenDate, customTags, templates, savedReports } = get()
     const data: AppData = {
       todos,
       lastOpenDate,
       customTags: customTags.length ? customTags : undefined,
-      templates: templates.length ? templates : undefined
+      templates: templates.length ? templates : undefined,
+      savedReports: Object.keys(savedReports).length ? savedReports : undefined
     }
     await window.api.setStoreData(data as unknown as Record<string, unknown>)
   },
@@ -503,6 +509,25 @@ export const useTodoStore = create<TodoStore>((set, get) => ({
         )
       ]
     }))
+    debouncedSave(get().saveToDisk)
+  },
+
+  // Saved weekly reports
+  savedReports: {},
+
+  saveWeeklyReport: (weekStart, text) => {
+    set((state) => ({
+      savedReports: { ...state.savedReports, [weekStart]: text }
+    }))
+    debouncedSave(get().saveToDisk)
+  },
+
+  clearSavedReport: (weekStart) => {
+    set((state) => {
+      const next = { ...state.savedReports }
+      delete next[weekStart]
+      return { savedReports: next }
+    })
     debouncedSave(get().saveToDisk)
   },
 
