@@ -43,6 +43,7 @@ export interface TodoBase {
   archived?: boolean
   subtasks?: Subtask[]
   tags?: string[]
+  attachments?: string[] // filenames stored under userData/images, rendered via app-image://
   changelog?: ChangeLogEntry[]
 }
 
@@ -61,6 +62,8 @@ export interface AppData {
   customTags?: string[]
   templates?: TodoTemplate[]
   savedReports?: Record<string, string> // key = weekStart, value = user-edited report text
+  memo?: string // single free-form notepad
+  memoUpdatedAt?: string // ISO timestamp of last memo edit
 }
 
 export type FilterCategory = TodoCategory | 'all'
@@ -120,7 +123,9 @@ declare global {
       onWeeklyReport: (
         callback: (_event: unknown, report: WeeklyReportData) => void
       ) => () => void
-      requestWeeklyReport: () => void
+      requestWeeklyReport: (weekOffset?: number) => void
+      saveImage: (buffer: ArrayBuffer, mime: string) => Promise<string>
+      deleteImage: (filename: string) => Promise<void>
     }
   }
 }

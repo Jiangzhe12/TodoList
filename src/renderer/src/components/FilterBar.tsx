@@ -25,7 +25,6 @@ export default function FilterBar({ searchFocusRef }: FilterBarProps): JSX.Eleme
     useTodoStore()
   const inputRef = useRef<HTMLInputElement>(null)
 
-  // Expose input ref for keyboard shortcut focus
   useEffect(() => {
     if (searchFocusRef && 'current' in searchFocusRef) {
       ;(searchFocusRef as React.MutableRefObject<HTMLInputElement | null>).current = inputRef.current
@@ -33,11 +32,12 @@ export default function FilterBar({ searchFocusRef }: FilterBarProps): JSX.Eleme
   }, [searchFocusRef])
 
   return (
-    <div className="px-3 py-2 border-b border-zinc-200 dark:border-zinc-800 space-y-2 bg-white/80 dark:bg-zinc-900/80">
+    <div className="px-3 py-2 space-y-2 surface-glass" style={{ borderBottom: '1px solid var(--border-subtle)' }}>
       {/* Search */}
       <div className="relative">
         <svg
-          className="absolute left-2 top-1/2 -translate-y-1/2 text-zinc-400 dark:text-zinc-500"
+          className="absolute left-2.5 top-1/2 -translate-y-1/2"
+          style={{ color: 'var(--text-muted)' }}
           width="12"
           height="12"
           viewBox="0 0 24 24"
@@ -54,14 +54,18 @@ export default function FilterBar({ searchFocusRef }: FilterBarProps): JSX.Eleme
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           placeholder="搜索任务..."
-          className="w-full pl-7 pr-2 py-1 text-xs bg-zinc-100 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 rounded text-zinc-800 dark:text-zinc-200 placeholder-zinc-400 dark:placeholder-zinc-500 focus:outline-none focus:border-zinc-400 dark:focus:border-zinc-500"
+          className="input-field sm"
+          style={{ paddingLeft: '28px', paddingRight: '24px', fontSize: '12px' }}
         />
         {searchQuery && (
           <button
             onClick={() => setSearchQuery('')}
-            className="absolute right-1.5 top-1/2 -translate-y-1/2 text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 text-xs"
+            className="absolute right-1.5 top-1/2 -translate-y-1/2 btn-icon"
+            style={{ padding: '2px' }}
           >
-            ✕
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+              <path d="M18 6L6 18M6 6l12 12" />
+            </svg>
           </button>
         )}
       </div>
@@ -72,11 +76,7 @@ export default function FilterBar({ searchFocusRef }: FilterBarProps): JSX.Eleme
           <button
             key={c.value}
             onClick={() => setFilterCategory(c.value)}
-            className={`px-2 py-0.5 text-[10px] rounded-full border transition-colors ${
-              filterCategory === c.value
-                ? 'border-blue-500/50 bg-blue-900/30 text-blue-300'
-                : 'border-zinc-300 dark:border-zinc-700 text-zinc-400 dark:text-zinc-500 hover:border-zinc-400 dark:hover:border-zinc-600 hover:text-zinc-600 dark:hover:text-zinc-400'
-            }`}
+            className={`pill ${filterCategory === c.value ? 'active' : ''}`}
           >
             {c.label}
           </button>
@@ -89,11 +89,7 @@ export default function FilterBar({ searchFocusRef }: FilterBarProps): JSX.Eleme
           <button
             key={s.value}
             onClick={() => setFilterStatus(s.value)}
-            className={`px-2 py-0.5 text-[10px] rounded-full border transition-colors ${
-              filterStatus === s.value
-                ? 'border-green-500/50 bg-green-900/30 text-green-300'
-                : 'border-zinc-300 dark:border-zinc-700 text-zinc-400 dark:text-zinc-500 hover:border-zinc-400 dark:hover:border-zinc-600 hover:text-zinc-600 dark:hover:text-zinc-400'
-            }`}
+            className={`pill ${filterStatus === s.value ? 'active' : ''}`}
           >
             {s.label}
           </button>
@@ -101,11 +97,7 @@ export default function FilterBar({ searchFocusRef }: FilterBarProps): JSX.Eleme
         <div className="flex-1" />
         <button
           onClick={toggleSortByPriority}
-          className={`px-2 py-0.5 text-[10px] rounded-full border transition-colors ${
-            sortByPriority
-              ? 'border-amber-500/50 bg-amber-900/30 text-amber-300'
-              : 'border-zinc-300 dark:border-zinc-700 text-zinc-400 dark:text-zinc-500 hover:border-zinc-400 dark:hover:border-zinc-600 hover:text-zinc-600 dark:hover:text-zinc-400'
-          }`}
+          className={`pill ${sortByPriority ? 'active' : ''}`}
           title="按优先级排序"
         >
           ↕ 优先级
@@ -117,11 +109,7 @@ export default function FilterBar({ searchFocusRef }: FilterBarProps): JSX.Eleme
         <div className="flex gap-1 flex-wrap">
           <button
             onClick={() => setFilterTag('')}
-            className={`px-2 py-0.5 text-[10px] rounded-full border transition-colors ${
-              !filterTag
-                ? 'border-purple-500/50 bg-purple-900/30 text-purple-300'
-                : 'border-zinc-300 dark:border-zinc-700 text-zinc-400 dark:text-zinc-500 hover:border-zinc-400 dark:hover:border-zinc-600 hover:text-zinc-600 dark:hover:text-zinc-400'
-            }`}
+            className={`pill ${!filterTag ? 'active' : ''}`}
           >
             全部标签
           </button>
@@ -129,11 +117,7 @@ export default function FilterBar({ searchFocusRef }: FilterBarProps): JSX.Eleme
             <button
               key={tag}
               onClick={() => setFilterTag(filterTag === tag ? '' : tag)}
-              className={`px-2 py-0.5 text-[10px] rounded-full border transition-colors ${
-                filterTag === tag
-                  ? 'border-purple-500/50 bg-purple-900/30 text-purple-300'
-                  : 'border-zinc-300 dark:border-zinc-700 text-zinc-400 dark:text-zinc-500 hover:border-zinc-400 dark:hover:border-zinc-600 hover:text-zinc-600 dark:hover:text-zinc-400'
-              }`}
+              className={`pill ${filterTag === tag ? 'active' : ''}`}
             >
               {tag}
             </button>

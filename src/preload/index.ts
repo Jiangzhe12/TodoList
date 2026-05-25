@@ -21,7 +21,11 @@ const api = {
       ipcRenderer.removeListener('report:ready', callback)
     }
   },
-  requestWeeklyReport: (): void => ipcRenderer.send('report:generate')
+  requestWeeklyReport: (weekOffset?: number): void => ipcRenderer.send('report:generate', weekOffset ?? 0),
+  saveImage: (buffer: ArrayBuffer, mime: string): Promise<string> =>
+    ipcRenderer.invoke('images:save', buffer, mime),
+  deleteImage: (filename: string): Promise<void> =>
+    ipcRenderer.invoke('images:delete', filename)
 }
 
 if (process.contextIsolated) {

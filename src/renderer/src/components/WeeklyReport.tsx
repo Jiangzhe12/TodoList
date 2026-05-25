@@ -3,10 +3,15 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import type { WeeklyReportData } from '../types'
 import { useTodoStore } from '../store'
+import { useImagePaste } from '../utils/useImagePaste'
+import { markdownUrlTransform } from '../utils/markdownUrl'
 
 interface WeeklyReportProps {
   report: WeeklyReportData
+  weekOffset: number
   onClose: () => void
+  onRegenerate: () => void
+  onChangeWeek: (offset: number) => void
 }
 
 type Tab = 'overview' | 'details' | 'report' | 'markdown'
@@ -262,7 +267,13 @@ function generateReportDraft(report: WeeklyReportData): string {
  * header stats strip, left accent bar, frosted-glass status badge, icon
  * buttons, and a monospace edit area that auto-resizes.
  */
-function ReportEditor({ report }: { report: WeeklyReportData }): JSX.Element {
+function ReportEditor({
+  report,
+  onRegenerate
+}: {
+  report: WeeklyReportData
+  onRegenerate: () => void
+}): JSX.Element {
   const savedReports = useTodoStore((s) => s.savedReports)
   const saveWeeklyReport = useTodoStore((s) => s.saveWeeklyReport)
   const clearSavedReport = useTodoStore((s) => s.clearSavedReport)
@@ -273,7 +284,29 @@ function ReportEditor({ report }: { report: WeeklyReportData }): JSX.Element {
   const [text, setText] = useState(savedText ?? generatedText)
   const [justSaved, setJustSaved] = useState(false)
   const [justCopied, setJustCopied] = useState(false)
+  const [isRegenerating, setIsRegenerating] = useState(false)
+  const [justRegenerated, setJustRegenerated] = useState(false)
+  const [editorMode, setEditorMode] = useState<'edit' | 'preview'>('edit')
+  const regeneratingRef = useRef(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+
+  const { onPaste, error: pasteError } = useImagePaste({
+    onImage: ({ url }) => {
+      const ta = textareaRef.current
+      if (!ta) return
+      const start = ta.selectionStart
+      const end = ta.selectionEnd
+      const insert = `![](${url})`
+      const next = text.slice(0, start) + insert + text.slice(end)
+      setText(next)
+      setJustSaved(false)
+      requestAnimationFrame(() => {
+        ta.focus()
+        const pos = start + insert.length
+        ta.selectionStart = ta.selectionEnd = pos
+      })
+    }
+  })
 
   const hasSaved = savedText !== undefined
   const isModified = hasSaved ? text !== savedText : text !== generatedText
@@ -287,6 +320,20 @@ function ReportEditor({ report }: { report: WeeklyReportData }): JSX.Element {
     }
   }, [text])
 
+  // When a fresh report arrives after 重新生成, sync text to the new draft
+  // and flash the "已重新生成" indicator.
+  useEffect(() => {
+    if (regeneratingRef.current) {
+      regeneratingRef.current = false
+      setIsRegenerating(false)
+      setText(generatedText)
+      setJustRegenerated(true)
+      const id = setTimeout(() => setJustRegenerated(false), 2000)
+      return () => clearTimeout(id)
+    }
+    return undefined
+  }, [report, generatedText])
+
   const handleSave = (): void => {
     saveWeeklyReport(report.weekStart, text)
     setJustSaved(true)
@@ -294,8 +341,11 @@ function ReportEditor({ report }: { report: WeeklyReportData }): JSX.Element {
   }
 
   const handleReset = (): void => {
+    if (isRegenerating) return
     clearSavedReport(report.weekStart)
-    setText(generatedText)
+    regeneratingRef.current = true
+    setIsRegenerating(true)
+    onRegenerate()
   }
 
   const handleEditorCopy = async (): Promise<void> => {
@@ -317,7 +367,15 @@ function ReportEditor({ report }: { report: WeeklyReportData }): JSX.Element {
   let statusLabel: string
   let statusDot: string
   let statusText: string
-  if (justSaved) {
+  if (isRegenerating) {
+    statusLabel = '生成中…'
+    statusDot = 'bg-blue-400 animate-pulse'
+    statusText = 'text-blue-600 dark:text-blue-400'
+  } else if (justRegenerated) {
+    statusLabel = '已重新生成'
+    statusDot = 'bg-emerald-400'
+    statusText = 'text-emerald-600 dark:text-emerald-400'
+  } else if (justSaved) {
     statusLabel = '已保存'
     statusDot = 'bg-emerald-400'
     statusText = 'text-emerald-600 dark:text-emerald-400'
@@ -339,7 +397,7 @@ function ReportEditor({ report }: { report: WeeklyReportData }): JSX.Element {
 
   // Inline SVG icon components (tiny, no extra deps)
   const IconRefresh = (
-    <svg className="w-3 h-3 group-hover:rotate-[-180deg] transition-transform duration-500" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <svg className={`w-3 h-3 transition-transform duration-500 ${isRegenerating ? 'animate-spin' : 'group-hover:rotate-[-180deg]'}`} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
       <path d="M2.5 8a5.5 5.5 0 019.62-3.6M13.5 8a5.5 5.5 0 01-9.62 3.6" />
       <path d="M12.5 1.5v3h-3M3.5 14.5v-3h3" />
     </svg>
@@ -407,26 +465,65 @@ function ReportEditor({ report }: { report: WeeklyReportData }): JSX.Element {
         </div>
       </div>
 
+      {/* ─── Editor mode toggle + paste-error inline ─── */}
+      <div className="flex items-center justify-between text-[10px]">
+        <div className="flex items-center gap-0.5 border border-zinc-200 dark:border-zinc-700 rounded p-0.5">
+          <button
+            onClick={() => setEditorMode('edit')}
+            className={`px-2 py-0.5 rounded transition-colors ${
+              editorMode === 'edit'
+                ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
+                : 'text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300'
+            }`}
+          >
+            编辑
+          </button>
+          <button
+            onClick={() => setEditorMode('preview')}
+            className={`px-2 py-0.5 rounded transition-colors ${
+              editorMode === 'preview'
+                ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
+                : 'text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300'
+            }`}
+          >
+            预览
+          </button>
+        </div>
+        {pasteError && <span className="text-red-500">{pasteError}</span>}
+      </div>
+
       {/* ─── Editor card ─── */}
       <div className="relative rounded-xl overflow-hidden border border-zinc-200/50 dark:border-zinc-700/30 shadow-sm">
         {/* Left accent bar */}
         <div className="absolute left-0 top-0 bottom-0 w-[3px] bg-gradient-to-b from-amber-400 via-orange-400/60 to-amber-300/0 dark:from-amber-500 dark:via-amber-600/40 dark:to-transparent" />
 
-        <textarea
-          ref={textareaRef}
-          value={text}
-          onChange={(e) => {
-            setText(e.target.value)
-            setJustSaved(false)
-          }}
-          spellCheck={false}
-          className="w-full min-h-[280px] pl-5 pr-4 py-4 bg-white/70 dark:bg-zinc-800/40 text-[12px] text-zinc-700 dark:text-zinc-200 placeholder-zinc-300 dark:placeholder-zinc-600 resize-none outline-none selection:bg-amber-200/40 dark:selection:bg-amber-500/20"
-          style={{
-            fontFamily: "Menlo, 'SF Mono', 'Fira Code', 'Cascadia Code', monospace",
-            lineHeight: '1.85'
-          }}
-          placeholder="写点什么..."
-        />
+        {editorMode === 'edit' ? (
+          <textarea
+            ref={textareaRef}
+            value={text}
+            onChange={(e) => {
+              setText(e.target.value)
+              setJustSaved(false)
+            }}
+            onPaste={onPaste}
+            spellCheck={false}
+            className="w-full min-h-[280px] pl-5 pr-4 py-4 bg-white/70 dark:bg-zinc-800/40 text-[12px] text-zinc-700 dark:text-zinc-200 placeholder-zinc-300 dark:placeholder-zinc-600 resize-none outline-none selection:bg-amber-200/40 dark:selection:bg-amber-500/20"
+            style={{
+              fontFamily: "Menlo, 'SF Mono', 'Fira Code', 'Cascadia Code', monospace",
+              lineHeight: '1.85'
+            }}
+            placeholder="写点什么... (粘贴图片自动插入)"
+          />
+        ) : (
+          <div
+            className="min-h-[280px] pl-5 pr-4 py-4 bg-white/70 dark:bg-zinc-800/40 text-[12px] text-zinc-700 dark:text-zinc-200 prose-mini"
+            style={{ lineHeight: '1.85' }}
+          >
+            <ReactMarkdown remarkPlugins={[remarkGfm]} urlTransform={markdownUrlTransform}>
+              {text || '*（空）*'}
+            </ReactMarkdown>
+          </div>
+        )}
       </div>
 
       {/* ─── Action bar ─── */}
@@ -438,10 +535,11 @@ function ReportEditor({ report }: { report: WeeklyReportData }): JSX.Element {
           {/* Reset */}
           <button
             onClick={handleReset}
-            className="group flex items-center gap-1 px-2.5 py-1.5 text-[10px] rounded-lg text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 active:scale-[0.96] transition-all duration-200"
+            disabled={isRegenerating}
+            className="group flex items-center gap-1 px-2.5 py-1.5 text-[10px] rounded-lg text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 active:scale-[0.96] disabled:opacity-50 disabled:cursor-wait transition-all duration-200"
           >
             {IconRefresh}
-            <span>重新生成</span>
+            <span>{isRegenerating ? '生成中…' : '重新生成'}</span>
           </button>
           {/* Save */}
           <button
@@ -498,7 +596,7 @@ function SectionHeader({
   )
 }
 
-export default function WeeklyReport({ report, onClose }: WeeklyReportProps): JSX.Element {
+export default function WeeklyReport({ report, weekOffset, onClose, onRegenerate, onChangeWeek }: WeeklyReportProps): JSX.Element {
   const [copied, setCopied] = useState(false)
   const [tab, setTab] = useState<Tab>('overview')
 
@@ -530,8 +628,35 @@ export default function WeeklyReport({ report, onClose }: WeeklyReportProps): JS
             <span className="text-base">📊</span>
             <div>
               <h2 className="text-sm font-semibold text-zinc-800 dark:text-zinc-200">周报</h2>
-              <div className="text-[10px] text-zinc-500 dark:text-zinc-400">
-                {report.weekStart} - {report.weekEnd}
+              {/* Week navigator */}
+              <div className="flex items-center gap-1.5 mt-0.5">
+                <button
+                  onClick={() => onChangeWeek(weekOffset - 1)}
+                  className="p-0.5 rounded hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 transition-colors"
+                  title="上一周"
+                >
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M15 18l-6-6 6-6" /></svg>
+                </button>
+                <span className="text-[10px] text-zinc-500 dark:text-zinc-400 tabular-nums min-w-[90px] text-center">
+                  {report.weekStart} - {report.weekEnd}
+                  {weekOffset === 0 && <span className="ml-1 text-[9px] text-blue-500 dark:text-blue-400">本周</span>}
+                </span>
+                <button
+                  onClick={() => onChangeWeek(weekOffset + 1)}
+                  disabled={weekOffset >= 0}
+                  className="p-0.5 rounded hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 transition-colors disabled:opacity-20 disabled:cursor-not-allowed"
+                  title="下一周"
+                >
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M9 18l6-6-6-6" /></svg>
+                </button>
+                {weekOffset !== 0 && (
+                  <button
+                    onClick={() => onChangeWeek(0)}
+                    className="ml-0.5 px-1.5 py-0.5 rounded text-[9px] bg-blue-500/10 text-blue-500 dark:text-blue-400 hover:bg-blue-500/20 transition-colors"
+                  >
+                    回到本周
+                  </button>
+                )}
               </div>
             </div>
           </div>
@@ -774,11 +899,13 @@ export default function WeeklyReport({ report, onClose }: WeeklyReportProps): JS
             </div>
           )}
 
-          {tab === 'report' && <ReportEditor report={report} />}
+          {tab === 'report' && <ReportEditor report={report} onRegenerate={onRegenerate} />}
 
           {tab === 'markdown' && (
             <div className="prose-mini">
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>{report.markdown}</ReactMarkdown>
+              <ReactMarkdown remarkPlugins={[remarkGfm]} urlTransform={markdownUrlTransform}>
+                {report.markdown}
+              </ReactMarkdown>
             </div>
           )}
         </div>

@@ -4,17 +4,16 @@ import { useTodoStore } from './store'
 import { getToday } from './utils/dates'
 import TitleBar from './components/TitleBar'
 import FilterBar from './components/FilterBar'
-import StatsPanel from './components/StatsPanel'
 import TodoList from './components/TodoList'
 import TodoForm from './components/TodoForm'
 import UndoToast from './components/UndoToast'
 import ArchiveView from './components/ArchiveView'
-import TemplateManager from './components/TemplateManager'
 import CalendarView from './components/CalendarView'
 import WeeklyReport from './components/WeeklyReport'
+import MemoView from './components/MemoView'
 
 export default function App(): JSX.Element {
-  const { loadFromDisk, runCarryOver, archiveDone, undoDelete, theme, createFromTemplate, toggleStatus, deleteTodo, setFocusedTodo } = useTodoStore()
+  const { loadFromDisk, runCarryOver, undoDelete, theme, addTodo, toggleStatus, deleteTodo, setFocusedTodo } = useTodoStore()
   const todos = useTodoStore((s) => s.todos)
   const filterCategory = useTodoStore((s) => s.filterCategory)
   const filterStatus = useTodoStore((s) => s.filterStatus)
@@ -25,14 +24,17 @@ export default function App(): JSX.Element {
 
   const [showForm, setShowForm] = useState(false)
   const [editingTodo, setEditingTodo] = useState<Todo | null>(null)
-  const [showStats, setShowStats] = useState(false)
+  const [initialTitle, setInitialTitle] = useState('')
   const [showFilter, setShowFilter] = useState(false)
   const [showArchive, setShowArchive] = useState(false)
-  const [showTemplates, setShowTemplates] = useState(false)
   const [showCalendar, setShowCalendar] = useState(false)
+  const [showMemo, setShowMemo] = useState(false)
   const [weeklyReport, setWeeklyReport] = useState<import('./types').WeeklyReportData | null>(null)
+  const [reportWeekOffset, setReportWeekOffset] = useState(0)
+  const [quickTitle, setQuickTitle] = useState('')
   const lastDateRef = useRef(getToday())
   const searchInputRef = useRef<HTMLInputElement | null>(null)
+  const quickInputRef = useRef<HTMLInputElement | null>(null)
 
   // Compute flattened visible todo IDs for keyboard navigation
   const priorityWeight: Record<TodoPriority, number> = { high: 0, medium: 1, low: 2 }
@@ -45,7 +47,6 @@ export default function App(): JSX.Element {
       const q = searchQuery.toLowerCase()
       result = result.filter((t) => t.title.toLowerCase().includes(q) || t.note?.toLowerCase().includes(q))
     }
-    // Group by date, sort within group
     const groups: Record<string, Todo[]> = {}
     for (const todo of result) {
       if (!groups[todo.date]) groups[todo.date] = []
@@ -67,7 +68,7 @@ export default function App(): JSX.Element {
     loadFromDisk()
   }, [loadFromDisk])
 
-  // Listen for global shortcut quick-add (Cmd+Shift+N from any app)
+  // Listen for global shortcut quick-add
   useEffect(() => {
     const cleanup = window.api.onQuickAdd(() => {
       setEditingTodo(null)
@@ -112,11 +113,10 @@ export default function App(): JSX.Element {
     (e: KeyboardEvent) => {
       const meta = e.metaKey || e.ctrlKey
 
-      // Cmd+N: New todo
+      // Cmd+N: Focus quick input
       if (meta && e.key === 'n') {
         e.preventDefault()
-        setEditingTodo(null)
-        setShowForm(true)
+        quickInputRef.current?.focus()
       }
 
       // Cmd+F: Toggle filter/search
@@ -137,21 +137,15 @@ export default function App(): JSX.Element {
         undoDelete()
       }
 
-      // Cmd+Shift+A: Archive all done
-      if (meta && e.shiftKey && e.key === 'a') {
-        e.preventDefault()
-        archiveDone()
-      }
-
-      // Escape: Close form / close archive / close templates / clear focus
+      // Escape: Close form / close archive / leave memo / clear focus
       if (e.key === 'Escape') {
         if (showForm) {
           setShowForm(false)
           setEditingTodo(null)
         } else if (showArchive) {
           setShowArchive(false)
-        } else if (showTemplates) {
-          setShowTemplates(false)
+        } else if (showMemo) {
+          setShowMemo(false)
         } else if (focusedTodoId) {
           setFocusedTodo(null)
         }
@@ -161,9 +155,8 @@ export default function App(): JSX.Element {
       const isInputFocused = document.activeElement instanceof HTMLInputElement ||
         document.activeElement instanceof HTMLTextAreaElement ||
         document.activeElement instanceof HTMLSelectElement
-      const noModal = !showForm && !showArchive && !showTemplates
+      const noModal = !showForm && !showArchive && !showMemo
       if (noModal && !isInputFocused && !meta) {
-        // Arrow keys: move focus
         if (e.key === 'ArrowDown' || e.key === 'j') {
           e.preventDefault()
           if (flattenedIds.length === 0) return
@@ -184,36 +177,30 @@ export default function App(): JSX.Element {
             if (idx > 0) setFocusedTodo(flattenedIds[idx - 1])
           }
         }
-        // Enter: toggle expand
         if (e.key === 'Enter' && focusedTodoId) {
           e.preventDefault()
-          // Find the TodoItem DOM element and toggle its expanded state
           const el = document.querySelector(`[data-todo-id="${focusedTodoId}"]`) as HTMLElement & { __toggleExpanded?: () => void } | null
           el?.__toggleExpanded?.()
         }
-        // E: edit focused todo
         if (e.key === 'e' && focusedTodoId) {
           e.preventDefault()
           const todo = todos.find((t) => t.id === focusedTodoId)
           if (todo) handleEdit(todo)
         }
-        // D: toggle status
         if (e.key === 'd' && focusedTodoId) {
           e.preventDefault()
           toggleStatus(focusedTodoId)
         }
-        // Delete/Backspace: delete
         if ((e.key === 'Delete' || e.key === 'Backspace') && focusedTodoId) {
           e.preventDefault()
           const idx = flattenedIds.indexOf(focusedTodoId)
           deleteTodo(focusedTodoId)
-          // Move focus to next or previous
           const nextId = flattenedIds[idx + 1] || flattenedIds[idx - 1] || null
           setFocusedTodo(nextId)
         }
       }
     },
-    [showForm, showArchive, showTemplates, undoDelete, archiveDone, focusedTodoId, flattenedIds, todos, toggleStatus, deleteTodo, setFocusedTodo]
+    [showForm, showArchive, showMemo, undoDelete, focusedTodoId, flattenedIds, todos, toggleStatus, deleteTodo, setFocusedTodo]
   )
 
   useEffect(() => {
@@ -229,13 +216,12 @@ export default function App(): JSX.Element {
   const handleCloseForm = (): void => {
     setShowForm(false)
     setEditingTodo(null)
+    setInitialTitle('')
   }
 
   return (
     <div className="flex flex-col h-full">
       <TitleBar
-        showStats={showStats}
-        onToggleStats={() => setShowStats((p) => !p)}
         showFilter={showFilter}
         onToggleFilter={() => {
           setShowFilter((p) => {
@@ -245,45 +231,92 @@ export default function App(): JSX.Element {
           })
         }}
         onShowArchive={() => setShowArchive(true)}
-        onArchiveDone={archiveDone}
-        onShowTemplates={() => setShowTemplates(true)}
         showCalendar={showCalendar}
         onToggleCalendar={() => setShowCalendar((p) => !p)}
         onGenerateReport={() => window.api.requestWeeklyReport()}
+        showMemo={showMemo}
+        onToggleMemo={() => setShowMemo((p) => !p)}
       />
 
-      {showStats && <StatsPanel />}
-      {showFilter && !showCalendar && <FilterBar searchFocusRef={searchInputRef} />}
+      {showFilter && !showCalendar && !showMemo && <FilterBar searchFocusRef={searchInputRef} />}
 
-      {showCalendar ? <CalendarView onEdit={handleEdit} /> : <TodoList onEdit={handleEdit} />}
+      {showMemo ? (
+        <MemoView />
+      ) : showCalendar ? (
+        <CalendarView onEdit={handleEdit} />
+      ) : (
+        <TodoList onEdit={handleEdit} />
+      )}
 
-      {/* Add button */}
-      <div className="p-3 border-t border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
+      {/* Quick capture */}
+      <div className="px-3 py-2 flex gap-2 items-center" style={{ borderTop: '1px solid var(--border-subtle)', background: 'var(--bg-surface)' }}>
+        <input
+          ref={quickInputRef}
+          type="text"
+          value={quickTitle}
+          onChange={(e) => setQuickTitle(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && !e.nativeEvent.isComposing && quickTitle.trim()) {
+              if (e.shiftKey) {
+                // Shift+Enter: open full form with title pre-filled
+                e.preventDefault()
+                setEditingTodo(null)
+                setInitialTitle(quickTitle.trim())
+                setShowForm(true)
+                setQuickTitle('')
+              } else {
+                // Enter: quick add
+                e.preventDefault()
+                addTodo({ title: quickTitle.trim(), category: 'feature', priority: 'medium' })
+                setQuickTitle('')
+              }
+            }
+          }}
+          className="input-field flex-1"
+          style={{ margin: 0, fontSize: '13px' }}
+          placeholder="快速添加任务… Enter 创建 / Shift+Enter 详细"
+        />
         <button
           onClick={() => {
             setEditingTodo(null)
+            setInitialTitle('')
             setShowForm(true)
           }}
-          className="w-full py-2 text-sm font-medium bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-600 dark:text-zinc-300 rounded-lg border border-zinc-300 dark:border-zinc-700 hover:border-zinc-400 dark:hover:border-zinc-600 transition-colors"
+          className="shrink-0 w-8 h-8 flex items-center justify-center rounded-lg transition-all active:scale-95"
+          style={{
+            background: 'var(--accent-softer)',
+            color: 'var(--accent)',
+            border: '1px solid var(--accent-soft)'
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = 'var(--accent-soft)'
+            e.currentTarget.style.borderColor = 'var(--accent)'
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = 'var(--accent-softer)'
+            e.currentTarget.style.borderColor = 'var(--accent-soft)'
+          }}
+          title="新建任务 (⌘N)"
         >
-          + 新建任务
-          <span className="ml-2 text-[10px] text-zinc-400 dark:text-zinc-500">⌘N</span>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+            <path d="M12 5v14M5 12h14" />
+          </svg>
         </button>
       </div>
 
-      {showForm && <TodoForm editingTodo={editingTodo} onClose={handleCloseForm} />}
+      {showForm && <TodoForm editingTodo={editingTodo} initialTitle={initialTitle} onClose={handleCloseForm} />}
       {showArchive && <ArchiveView onClose={() => setShowArchive(false)} />}
-      {showTemplates && (
-        <TemplateManager
-          onClose={() => setShowTemplates(false)}
-          onCreateFromTemplate={(id) => {
-            createFromTemplate(id)
-            setShowTemplates(false)
+      {weeklyReport && (
+        <WeeklyReport
+          report={weeklyReport}
+          weekOffset={reportWeekOffset}
+          onClose={() => { setWeeklyReport(null); setReportWeekOffset(0) }}
+          onRegenerate={() => window.api.requestWeeklyReport(reportWeekOffset)}
+          onChangeWeek={(offset) => {
+            setReportWeekOffset(offset)
+            window.api.requestWeeklyReport(offset)
           }}
         />
-      )}
-      {weeklyReport && (
-        <WeeklyReport report={weeklyReport} onClose={() => setWeeklyReport(null)} />
       )}
       <UndoToast />
     </div>

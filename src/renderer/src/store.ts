@@ -47,6 +47,7 @@ interface TodoStore {
     dueDate?: string
     note?: string
     tags?: string[]
+    attachments?: string[]
     bugCause?: string
     fixPlan?: string
   }) => void
@@ -84,6 +85,11 @@ interface TodoStore {
   savedReports: Record<string, string>
   saveWeeklyReport: (weekStart: string, text: string) => void
   clearSavedReport: (weekStart: string) => void
+
+  // Free-form notepad (single page)
+  memo: string
+  memoUpdatedAt: string
+  setMemo: (value: string) => void
 
   // Focus (keyboard navigation)
   focusedTodoId: string | null
@@ -180,7 +186,7 @@ export const useTodoStore = create<TodoStore>((set, get) => ({
           return base
         })
         const carried = carryOverTodos(todosWithOrder, raw.lastOpenDate || today)
-        set({ todos: carried, lastOpenDate: today, loaded: true, customTags: raw.customTags || [], templates: raw.templates || [], savedReports: raw.savedReports || {} })
+        set({ todos: carried, lastOpenDate: today, loaded: true, customTags: raw.customTags || [], templates: raw.templates || [], savedReports: raw.savedReports || {}, memo: raw.memo || '', memoUpdatedAt: raw.memoUpdatedAt || '' })
         if (raw.lastOpenDate !== today || needsMigrationSave) {
           await get().saveToDisk()
         }
@@ -193,13 +199,15 @@ export const useTodoStore = create<TodoStore>((set, get) => ({
   },
 
   saveToDisk: async () => {
-    const { todos, lastOpenDate, customTags, templates, savedReports } = get()
+    const { todos, lastOpenDate, customTags, templates, savedReports, memo, memoUpdatedAt } = get()
     const data: AppData = {
       todos,
       lastOpenDate,
       customTags: customTags.length ? customTags : undefined,
       templates: templates.length ? templates : undefined,
-      savedReports: Object.keys(savedReports).length ? savedReports : undefined
+      savedReports: Object.keys(savedReports).length ? savedReports : undefined,
+      memo: memo || undefined,
+      memoUpdatedAt: memoUpdatedAt || undefined
     }
     await window.api.setStoreData(data as unknown as Record<string, unknown>)
   },
@@ -220,6 +228,7 @@ export const useTodoStore = create<TodoStore>((set, get) => ({
       note: params.note,
       dueDate: params.dueDate,
       tags: params.tags?.length ? params.tags : undefined,
+      attachments: params.attachments?.length ? params.attachments : undefined,
       ...(params.category === 'bug'
         ? { bugCause: params.bugCause, fixPlan: params.fixPlan }
         : {})
@@ -528,6 +537,14 @@ export const useTodoStore = create<TodoStore>((set, get) => ({
       delete next[weekStart]
       return { savedReports: next }
     })
+    debouncedSave(get().saveToDisk)
+  },
+
+  // Free-form notepad
+  memo: '',
+  memoUpdatedAt: '',
+  setMemo: (value) => {
+    set({ memo: value, memoUpdatedAt: new Date().toISOString() })
     debouncedSave(get().saveToDisk)
   },
 

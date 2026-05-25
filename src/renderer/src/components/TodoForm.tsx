@@ -1,15 +1,29 @@
 import { useState, useEffect } from 'react'
 import { Todo, TodoCategory, TodoPriority, isBugTodo } from '../types'
 import { useTodoStore } from '../store'
+import { useImagePaste } from '../utils/useImagePaste'
 import BugFields from './BugFields'
 
 interface TodoFormProps {
   editingTodo?: Todo | null
+  initialTitle?: string
   onClose: () => void
 }
 
-export default function TodoForm({ editingTodo, onClose }: TodoFormProps): JSX.Element {
-  const { addTodo, updateTodo, customTags, addCustomTag, templates, addTemplate } = useTodoStore()
+const categoryOptions: { value: TodoCategory; label: string }[] = [
+  { value: 'feature', label: 'Feature' },
+  { value: 'bug', label: 'Bug' },
+  { value: 'optimization', label: '优化' }
+]
+
+const priorityOptions: { value: TodoPriority; label: string }[] = [
+  { value: 'high', label: '高' },
+  { value: 'medium', label: '中' },
+  { value: 'low', label: '低' }
+]
+
+export default function TodoForm({ editingTodo, initialTitle, onClose }: TodoFormProps): JSX.Element {
+  const { addTodo, updateTodo, customTags, addCustomTag } = useTodoStore()
 
   const [title, setTitle] = useState('')
   const [category, setCategory] = useState<TodoCategory>('feature')
@@ -20,9 +34,14 @@ export default function TodoForm({ editingTodo, onClose }: TodoFormProps): JSX.E
   const [fixPlan, setFixPlan] = useState('')
   const [tags, setTags] = useState<string[]>([])
   const [tagInput, setTagInput] = useState('')
-  const [showSaveTemplate, setShowSaveTemplate] = useState(false)
-  const [templateName, setTemplateName] = useState('')
-  const [subtaskInputs, setSubtaskInputs] = useState<string[]>([])
+  const [attachments, setAttachments] = useState<string[]>([])
+  const [lightbox, setLightbox] = useState<string | null>(null)
+
+  const { onPaste: onImagePaste, error: pasteError } = useImagePaste({
+    onImage: ({ filename }) => {
+      setAttachments((prev) => [...prev, filename])
+    }
+  })
 
   useEffect(() => {
     if (editingTodo) {
@@ -32,37 +51,15 @@ export default function TodoForm({ editingTodo, onClose }: TodoFormProps): JSX.E
       setDueDate(editingTodo.dueDate || '')
       setNote(editingTodo.note || '')
       setTags(editingTodo.tags || [])
+      setAttachments(editingTodo.attachments || [])
       if (isBugTodo(editingTodo)) {
         setBugCause(editingTodo.bugCause || '')
         setFixPlan(editingTodo.fixPlan || '')
       }
+    } else if (initialTitle) {
+      setTitle(initialTitle)
     }
-  }, [editingTodo])
-
-  const handleLoadTemplate = (templateId: string): void => {
-    const tmpl = templates.find((t) => t.id === templateId)
-    if (!tmpl) return
-    setTitle(tmpl.name)
-    setCategory(tmpl.category)
-    setPriority(tmpl.priority)
-    setTags(tmpl.tags || [])
-    setNote(tmpl.note || '')
-    setSubtaskInputs(tmpl.subtasks || [])
-  }
-
-  const handleSaveAsTemplate = (): void => {
-    if (!templateName.trim()) return
-    addTemplate({
-      name: templateName.trim(),
-      category,
-      priority,
-      tags: tags.length ? tags : undefined,
-      subtasks: subtaskInputs.filter((s) => s.trim()),
-      note: note.trim() || undefined
-    })
-    setShowSaveTemplate(false)
-    setTemplateName('')
-  }
+  }, [editingTodo, initialTitle])
 
   const handleSubmit = (e: React.FormEvent): void => {
     e.preventDefault()
@@ -75,7 +72,8 @@ export default function TodoForm({ editingTodo, onClose }: TodoFormProps): JSX.E
         priority,
         dueDate: dueDate || undefined,
         note: note.trim() || undefined,
-        tags: tags.length ? tags : undefined
+        tags: tags.length ? tags : undefined,
+        attachments: attachments.length ? attachments : undefined
       }
       if (category === 'bug') {
         ;(patch as Record<string, unknown>).bugCause = bugCause.trim() || undefined
@@ -90,6 +88,7 @@ export default function TodoForm({ editingTodo, onClose }: TodoFormProps): JSX.E
         dueDate: dueDate || undefined,
         note: note.trim() || undefined,
         tags: tags.length ? tags : undefined,
+        attachments: attachments.length ? attachments : undefined,
         bugCause: category === 'bug' ? bugCause.trim() || undefined : undefined,
         fixPlan: category === 'bug' ? fixPlan.trim() || undefined : undefined
       })
@@ -98,249 +97,251 @@ export default function TodoForm({ editingTodo, onClose }: TodoFormProps): JSX.E
     onClose()
   }
 
+  const removeAttachment = (filename: string): void => {
+    setAttachments((prev) => prev.filter((f) => f !== filename))
+    // Only delete from disk if this is a brand-new attachment that hasn't
+    // been saved yet (i.e. the editing todo doesn't reference it). When
+    // editing, leave the file alone — the store update is the canonical
+    // moment to delete, but we keep it simple and skip disk cleanup here.
+    if (!editingTodo?.attachments?.includes(filename)) {
+      void window.api.deleteImage(filename)
+    }
+  }
+
   const handleBugFieldChange = (field: 'bugCause' | 'fixPlan', value: string): void => {
     if (field === 'bugCause') setBugCause(value)
     else setFixPlan(value)
   }
 
-  const categories: { value: TodoCategory; label: string; color: string }[] = [
-    { value: 'feature', label: 'Feature', color: 'border-blue-500 text-blue-300' },
-    { value: 'bug', label: 'Bug', color: 'border-red-500 text-red-300' },
-    { value: 'optimization', label: '优化', color: 'border-amber-500 text-amber-300' }
-  ]
-
-  const priorities: { value: TodoPriority; label: string; color: string }[] = [
-    { value: 'high', label: '高', color: 'border-red-500 text-red-300' },
-    { value: 'medium', label: '中', color: 'border-yellow-500 text-yellow-300' },
-    { value: 'low', label: '低', color: 'border-zinc-500 text-zinc-400' }
-  ]
-
   return (
-    <div className="fixed inset-0 bg-black/60 z-50 flex items-end animate-fade-in">
-      <div className="w-full bg-white dark:bg-zinc-900 border-t border-zinc-300 dark:border-zinc-700 rounded-t-xl p-4 max-h-[80%] overflow-y-auto animate-slide-in-bottom">
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="text-sm font-semibold text-zinc-800 dark:text-zinc-200">
-            {editingTodo ? '编辑任务' : '新建任务'}
-          </h2>
-          <button
-            onClick={onClose}
-            className="p-1 rounded hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200"
-          >
-            ✕
-          </button>
-        </div>
+    <div className="modal-overlay animate-fade-in">
+      <div className="modal-sheet animate-slide-in-bottom" onPaste={onImagePaste}>
+        <div className="p-4 max-h-[80vh] overflow-y-auto">
+          {/* Header */}
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
+              {editingTodo ? '编辑任务' : '新建任务'}
+            </h2>
+            <button onClick={onClose} className="btn-icon" style={{ padding: '4px' }}>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <path d="M18 6L6 18M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
 
-        <form onSubmit={handleSubmit} className="space-y-3">
-          {/* Template selector (only when creating) */}
-          {!editingTodo && templates.length > 0 && (
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-zinc-400 dark:text-zinc-500 w-12 shrink-0">模板</span>
-              <select
-                onChange={(e) => {
-                  if (e.target.value) handleLoadTemplate(e.target.value)
-                  e.target.value = ''
-                }}
-                className="flex-1 px-2 py-1.5 text-xs bg-zinc-100 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 rounded-lg text-zinc-700 dark:text-zinc-300 focus:outline-none focus:border-zinc-400 dark:focus:border-zinc-500"
-                defaultValue=""
-              >
-                <option value="" disabled>从模板创建...</option>
-                {templates.map((t) => (
-                  <option key={t.id} value={t.id}>{t.name}</option>
-                ))}
-              </select>
-            </div>
-          )}
-
-          <div>
+          <form onSubmit={handleSubmit} className="space-y-3">
+            {/* Title */}
             <input
               type="text"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              className="w-full px-3 py-2 text-sm bg-zinc-100 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 rounded-lg text-zinc-800 dark:text-zinc-200 placeholder-zinc-400 dark:placeholder-zinc-500 focus:outline-none focus:border-zinc-400 dark:focus:border-zinc-500"
+              className="input-field"
               placeholder="任务标题..."
               autoFocus
             />
-          </div>
 
-          <div className="flex gap-2">
-            {categories.map((cat) => (
-              <button
-                key={cat.value}
-                type="button"
-                onClick={() => setCategory(cat.value)}
-                className={`flex-1 py-1.5 text-xs font-medium rounded-lg border transition-colors ${
-                  category === cat.value
-                    ? `${cat.color} bg-zinc-100 dark:bg-zinc-800`
-                    : 'border-zinc-300 dark:border-zinc-700 text-zinc-400 dark:text-zinc-500 hover:border-zinc-400 dark:hover:border-zinc-600'
-                }`}
-              >
-                {cat.label}
-              </button>
-            ))}
-          </div>
-
-          {/* Priority */}
-          <div className="flex gap-2">
-            <span className="text-xs text-zinc-400 dark:text-zinc-500 self-center w-12 shrink-0">优先级</span>
-            {priorities.map((p) => (
-              <button
-                key={p.value}
-                type="button"
-                onClick={() => setPriority(p.value)}
-                className={`flex-1 py-1.5 text-xs font-medium rounded-lg border transition-colors ${
-                  priority === p.value
-                    ? `${p.color} bg-zinc-100 dark:bg-zinc-800`
-                    : 'border-zinc-300 dark:border-zinc-700 text-zinc-400 dark:text-zinc-500 hover:border-zinc-400 dark:hover:border-zinc-600'
-                }`}
-              >
-                {p.label}
-              </button>
-            ))}
-          </div>
-
-          {/* Due Date */}
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-zinc-400 dark:text-zinc-500 w-12 shrink-0">截止</span>
-            <input
-              type="date"
-              value={dueDate}
-              onChange={(e) => setDueDate(e.target.value)}
-              className="flex-1 px-3 py-1.5 text-sm bg-zinc-100 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 rounded-lg text-zinc-800 dark:text-zinc-200 focus:outline-none focus:border-zinc-400 dark:focus:border-zinc-500 dark:[color-scheme:dark]"
-            />
-            {dueDate && (
-              <button
-                type="button"
-                onClick={() => setDueDate('')}
-                className="text-xs text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300"
-              >
-                清除
-              </button>
-            )}
-          </div>
-
-          {/* Tags */}
-          <div className="space-y-1.5">
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-zinc-400 dark:text-zinc-500 w-12 shrink-0">标签</span>
-              <div className="flex-1 flex flex-wrap gap-1 items-center">
-                {tags.map((tag) => (
-                  <span
-                    key={tag}
-                    className="inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] bg-purple-900/30 border border-purple-500/30 text-purple-300 rounded"
-                  >
-                    {tag}
-                    <button
-                      type="button"
-                      onClick={() => setTags(tags.filter((t) => t !== tag))}
-                      className="text-purple-400 hover:text-purple-200 ml-0.5"
-                    >
-                      ✕
-                    </button>
-                  </span>
-                ))}
-                <input
-                  type="text"
-                  value={tagInput}
-                  onChange={(e) => setTagInput(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && tagInput.trim()) {
-                      e.preventDefault()
-                      const newTag = tagInput.trim()
-                      if (!tags.includes(newTag)) {
-                        setTags([...tags, newTag])
-                        addCustomTag(newTag)
-                      }
-                      setTagInput('')
-                    }
+            {/* Category */}
+            <div className="flex gap-2">
+              {categoryOptions.map((cat) => (
+                <button
+                  key={cat.value}
+                  type="button"
+                  onClick={() => setCategory(cat.value)}
+                  className="flex-1 py-1.5 text-xs font-medium rounded-lg transition-all"
+                  style={{
+                    border: `1px solid ${category === cat.value ? 'var(--accent)' : 'var(--border-default)'}`,
+                    background: category === cat.value ? 'var(--accent-soft)' : 'transparent',
+                    color: category === cat.value ? 'var(--accent)' : 'var(--text-muted)'
                   }}
-                  placeholder="输入后回车..."
-                  className="flex-1 min-w-[80px] text-xs px-1.5 py-0.5 bg-transparent text-zinc-700 dark:text-zinc-300 placeholder-zinc-400 dark:placeholder-zinc-600 focus:outline-none"
-                />
-              </div>
+                >
+                  {cat.label}
+                </button>
+              ))}
             </div>
-            {customTags.filter((t) => !tags.includes(t)).length > 0 && (
-              <div className="flex gap-1 flex-wrap ml-14">
-                {customTags
-                  .filter((t) => !tags.includes(t))
-                  .slice(0, 8)
-                  .map((tag) => (
-                    <button
-                      key={tag}
-                      type="button"
-                      onClick={() => setTags([...tags, tag])}
-                      className="px-1.5 py-0.5 text-[10px] border border-zinc-300 dark:border-zinc-700 text-zinc-400 dark:text-zinc-500 rounded hover:border-purple-500/30 hover:text-purple-300 transition-colors"
-                    >
-                      + {tag}
-                    </button>
-                  ))}
-              </div>
-            )}
-          </div>
 
-          {category === 'bug' && (
-            <BugFields bugCause={bugCause} fixPlan={fixPlan} onChange={handleBugFieldChange} />
-          )}
+            {/* Priority */}
+            <div className="flex gap-2 items-center">
+              <span className="text-xs w-12 shrink-0" style={{ color: 'var(--text-muted)' }}>优先级</span>
+              {priorityOptions.map((p) => (
+                <button
+                  key={p.value}
+                  type="button"
+                  onClick={() => setPriority(p.value)}
+                  className="flex-1 py-1.5 text-xs font-medium rounded-lg transition-all"
+                  style={{
+                    border: `1px solid ${priority === p.value ? 'var(--accent)' : 'var(--border-default)'}`,
+                    background: priority === p.value ? 'var(--accent-soft)' : 'transparent',
+                    color: priority === p.value ? 'var(--accent)' : 'var(--text-muted)'
+                  }}
+                >
+                  {p.label}
+                </button>
+              ))}
+            </div>
 
-          <div>
-            <textarea
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-              className="w-full px-2 py-1.5 text-sm bg-zinc-100 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 rounded text-zinc-800 dark:text-zinc-200 placeholder-zinc-400 dark:placeholder-zinc-500 resize-none focus:outline-none focus:border-zinc-400 dark:focus:border-zinc-500"
-              rows={2}
-              placeholder="备注 (可选)..."
-            />
-          </div>
-
-          {/* Save as template */}
-          {!editingTodo && (
-            <div>
-              {!showSaveTemplate ? (
+            {/* Due Date */}
+            <div className="flex items-center gap-2">
+              <span className="text-xs w-12 shrink-0" style={{ color: 'var(--text-muted)' }}>截止</span>
+              <input
+                type="date"
+                value={dueDate}
+                onChange={(e) => setDueDate(e.target.value)}
+                className="input-field sm flex-1 dark:[color-scheme:dark]"
+              />
+              {dueDate && (
                 <button
                   type="button"
-                  onClick={() => setShowSaveTemplate(true)}
-                  className="text-[10px] text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
+                  onClick={() => setDueDate('')}
+                  className="text-xs transition-colors"
+                  style={{ color: 'var(--text-muted)' }}
+                  onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--accent)')}
+                  onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--text-muted)')}
                 >
-                  📋 保存为模板
+                  清除
                 </button>
-              ) : (
-                <div className="flex gap-1.5 items-center">
+              )}
+            </div>
+
+            {/* Tags */}
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-2">
+                <span className="text-xs w-12 shrink-0" style={{ color: 'var(--text-muted)' }}>标签</span>
+                <div className="flex-1 flex flex-wrap gap-1 items-center">
+                  {tags.map((tag) => (
+                    <span key={tag} className="tag-chip">
+                      {tag}
+                      <button
+                        type="button"
+                        onClick={() => setTags(tags.filter((t) => t !== tag))}
+                        className="opacity-60 hover:opacity-100 transition-opacity"
+                        style={{ color: 'var(--accent)' }}
+                      >
+                        ✕
+                      </button>
+                    </span>
+                  ))}
                   <input
                     type="text"
-                    value={templateName}
-                    onChange={(e) => setTemplateName(e.target.value)}
-                    placeholder="模板名称..."
-                    className="flex-1 px-2 py-1 text-xs bg-zinc-100 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 rounded text-zinc-700 dark:text-zinc-300 placeholder-zinc-400 dark:placeholder-zinc-600 focus:outline-none focus:border-zinc-400 dark:focus:border-zinc-500"
+                    value={tagInput}
+                    onChange={(e) => setTagInput(e.target.value)}
                     onKeyDown={(e) => {
-                      if (e.key === 'Enter') { e.preventDefault(); handleSaveAsTemplate() }
+                      if (e.key === 'Enter' && !e.nativeEvent.isComposing && tagInput.trim()) {
+                        e.preventDefault()
+                        const newTag = tagInput.trim()
+                        if (!tags.includes(newTag)) {
+                          setTags([...tags, newTag])
+                          addCustomTag(newTag)
+                        }
+                        setTagInput('')
+                      }
                     }}
+                    placeholder="输入后回车..."
+                    className="flex-1 min-w-[80px] text-xs px-1.5 py-0.5 bg-transparent focus:outline-none"
+                    style={{ color: 'var(--text-primary)' }}
                   />
-                  <button
-                    type="button"
-                    onClick={handleSaveAsTemplate}
-                    className="px-2 py-1 text-[10px] rounded bg-purple-600 hover:bg-purple-500 text-white transition-colors"
-                  >
-                    保存
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => { setShowSaveTemplate(false); setTemplateName('') }}
-                    className="text-[10px] text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300"
-                  >
-                    取消
-                  </button>
+                </div>
+              </div>
+              {customTags.filter((t) => !tags.includes(t)).length > 0 && (
+                <div className="flex gap-1 flex-wrap ml-14">
+                  {customTags
+                    .filter((t) => !tags.includes(t))
+                    .slice(0, 8)
+                    .map((tag) => (
+                      <button
+                        key={tag}
+                        type="button"
+                        onClick={() => setTags([...tags, tag])}
+                        className="pill"
+                        style={{ fontSize: '10px' }}
+                      >
+                        + {tag}
+                      </button>
+                    ))}
                 </div>
               )}
             </div>
-          )}
 
-          <button
-            type="submit"
-            className="w-full py-2 text-sm font-medium bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors"
-          >
-            {editingTodo ? '保存' : '添加'}
-          </button>
-        </form>
+            {/* Bug fields */}
+            {category === 'bug' && (
+              <BugFields bugCause={bugCause} fixPlan={fixPlan} onChange={handleBugFieldChange} />
+            )}
+
+            {/* Note */}
+            <textarea
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              className="input-field resize-none"
+              style={{ fontSize: '13px' }}
+              rows={2}
+              placeholder="备注 (可选)..."
+            />
+
+            {/* Attachments */}
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                  附件{attachments.length > 0 ? ` · ${attachments.length}` : ''}
+                </span>
+                <span className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
+                  Cmd+V 粘贴图片 · 最大 5MB
+                </span>
+              </div>
+              {attachments.length > 0 && (
+                <div className="flex flex-wrap gap-1.5">
+                  {attachments.map((f) => (
+                    <div
+                      key={f}
+                      className="relative group/att rounded overflow-hidden"
+                      style={{ border: '1px solid var(--border-default)', width: '60px', height: '60px' }}
+                    >
+                      <img
+                        src={`app-image://${f}`}
+                        alt=""
+                        className="w-full h-full object-cover cursor-zoom-in"
+                        onClick={() => setLightbox(f)}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => removeAttachment(f)}
+                        className="absolute top-0 right-0 w-4 h-4 flex items-center justify-center text-[10px] opacity-0 group-hover/att:opacity-100 transition-opacity"
+                        style={{ background: 'rgba(0,0,0,0.6)', color: '#fff' }}
+                        title="移除"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {pasteError && (
+                <p className="text-[11px]" style={{ color: '#ef4444' }}>
+                  {pasteError}
+                </p>
+              )}
+            </div>
+
+            {/* Submit */}
+            <button type="submit" className="btn-primary">
+              {editingTodo ? '保存' : '添加'}
+            </button>
+          </form>
+        </div>
       </div>
+
+      {lightbox && (
+        <div
+          className="modal-overlay animate-fade-in"
+          style={{ zIndex: 60, cursor: 'zoom-out' }}
+          onClick={() => setLightbox(null)}
+        >
+          <img
+            src={`app-image://${lightbox}`}
+            alt=""
+            style={{ maxWidth: '90vw', maxHeight: '90vh', objectFit: 'contain' }}
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      )}
     </div>
   )
 }

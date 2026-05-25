@@ -13,43 +13,54 @@ export default function TemplateManager({ onClose, onCreateFromTemplate }: Templ
   const deleteTemplate = useTodoStore((s) => s.deleteTemplate)
 
   return (
-    <div className="fixed inset-0 bg-black/60 z-50 flex items-end animate-fade-in">
-      <div className="w-full bg-white dark:bg-zinc-900 border-t border-zinc-300 dark:border-zinc-700 rounded-t-xl max-h-[80%] flex flex-col animate-slide-in-bottom">
-        <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-200 dark:border-zinc-800">
-          <h2 className="text-sm font-semibold text-zinc-800 dark:text-zinc-200">
+    <div className="modal-overlay animate-fade-in">
+      <div className="modal-sheet animate-slide-in-bottom">
+        {/* Header */}
+        <div className="modal-header">
+          <h2 className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
             任务模板
-            <span className="ml-2 text-zinc-400 dark:text-zinc-500 font-normal">({templates.length})</span>
+            <span className="ml-2 text-xs font-normal" style={{ color: 'var(--text-muted)' }}>
+              ({templates.length})
+            </span>
           </h2>
-          <button
-            onClick={onClose}
-            className="p-1 rounded hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200"
-          >
-            ✕
+          <button onClick={onClose} className="btn-icon" style={{ padding: '4px' }}>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+              <path d="M18 6L6 18M6 6l12 12" />
+            </svg>
           </button>
         </div>
 
+        {/* List */}
         <div className="overflow-y-auto flex-1 p-2">
           {templates.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-32 text-zinc-400 dark:text-zinc-500">
-              <span className="text-2xl mb-2">📋</span>
+            <div className="flex flex-col items-center justify-center h-32" style={{ color: 'var(--text-muted)' }}>
+              <div
+                className="w-10 h-10 rounded-xl flex items-center justify-center mb-3"
+                style={{ background: 'var(--accent-softer)' }}
+              >
+                <span className="text-lg">📋</span>
+              </div>
               <span className="text-sm">暂无模板</span>
-              <span className="text-[10px] mt-1 text-zinc-400 dark:text-zinc-600">在新建任务时可以"保存为模板"</span>
+              <span className="text-[10px] mt-1">在新建任务时可以"保存为模板"</span>
             </div>
           ) : (
             templates.map((tmpl) => (
               <div
                 key={tmpl.id}
-                className="group flex items-center gap-2 px-3 py-2.5 border-b border-zinc-200 dark:border-zinc-800/50 hover:bg-zinc-100 dark:hover:bg-zinc-800/30"
+                className="group flex items-center gap-2 px-3 py-2.5 rounded-lg transition-colors"
+                style={{ borderBottom: '1px solid var(--border-subtle)' }}
+                onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--accent-softer)')}
+                onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
               >
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
-                    <span className="text-sm text-zinc-700 dark:text-zinc-300 truncate font-medium">{tmpl.name}</span>
+                    <span className="text-sm font-medium truncate" style={{ color: 'var(--text-primary)' }}>{tmpl.name}</span>
                     <CategoryBadge category={tmpl.category} />
-                    <span className="text-[10px] text-zinc-400 dark:text-zinc-500">
+                    <span className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
                       {priorityLabels[tmpl.priority]}
                     </span>
                   </div>
-                  <div className="flex gap-2 mt-0.5 text-[10px] text-zinc-400 dark:text-zinc-500">
+                  <div className="flex gap-2 mt-0.5 text-[10px]" style={{ color: 'var(--text-muted)' }}>
                     {tmpl.subtasks && tmpl.subtasks.length > 0 && (
                       <span>{tmpl.subtasks.length} 个子任务</span>
                     )}
@@ -61,13 +72,23 @@ export default function TemplateManager({ onClose, onCreateFromTemplate }: Templ
                 <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                   <button
                     onClick={() => onCreateFromTemplate(tmpl.id)}
-                    className="px-2 py-0.5 text-[10px] rounded border border-blue-400/50 text-blue-400 hover:text-blue-300 hover:border-blue-400 transition-colors"
+                    className="pill active"
+                    style={{ cursor: 'pointer' }}
                   >
                     创建任务
                   </button>
                   <button
                     onClick={() => deleteTemplate(tmpl.id)}
-                    className="px-2 py-0.5 text-[10px] rounded border border-zinc-300 dark:border-zinc-700 text-zinc-500 dark:text-zinc-400 hover:text-red-500 dark:hover:text-red-400 hover:border-red-400 dark:hover:border-red-500/50 transition-colors"
+                    className="pill"
+                    style={{ cursor: 'pointer' }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.borderColor = '#ef4444'
+                      e.currentTarget.style.color = '#ef4444'
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.borderColor = 'var(--border-default)'
+                      e.currentTarget.style.color = 'var(--text-muted)'
+                    }}
                   >
                     删除
                   </button>

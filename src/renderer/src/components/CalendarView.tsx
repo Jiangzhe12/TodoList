@@ -22,35 +22,27 @@ export default function CalendarView({ onEdit }: { onEdit: (todo: Todo) => void 
   const [currentMonth, setCurrentMonth] = useState(new Date())
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
 
-  // Build a map: dateStr → todos
   const todosByDate = useMemo(() => {
     const map: Record<string, Todo[]> = {}
     for (const todo of todos) {
-      if (todo.archived) continue
       if (!map[todo.date]) map[todo.date] = []
       map[todo.date].push(todo)
     }
     return map
   }, [todos])
 
-  // Calendar grid
   const calendarDays = useMemo(() => {
     const monthStart = startOfMonth(currentMonth)
     const monthEnd = endOfMonth(currentMonth)
     const days = eachDayOfInterval({ start: monthStart, end: monthEnd })
-
-    // Pad start with empty cells
-    const startPad = getDay(monthStart) // 0=Sun
+    const startPad = getDay(monthStart)
     const grid: (Date | null)[] = []
     for (let i = 0; i < startPad; i++) grid.push(null)
     grid.push(...days)
-
-    // Pad end to fill last row
     while (grid.length % 7 !== 0) grid.push(null)
     return grid
   }, [currentMonth])
 
-  // Selected date todos
   const selectedTodos = useMemo(() => {
     if (!selectedDate) return []
     return (todosByDate[selectedDate] || []).sort((a, b) => a.order - b.order)
@@ -65,28 +57,35 @@ export default function CalendarView({ onEdit }: { onEdit: (todo: Todo) => void 
   return (
     <div className="overflow-y-auto flex-1">
       {/* Month navigation */}
-      <div className="flex items-center justify-between px-4 py-2 border-b border-zinc-200 dark:border-zinc-800">
+      <div
+        className="flex items-center justify-between px-4 py-2"
+        style={{ borderBottom: '1px solid var(--border-subtle)' }}
+      >
         <button
           onClick={() => setCurrentMonth(subMonths(currentMonth, 1))}
-          className="p-1 rounded hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-500 dark:text-zinc-400"
+          className="btn-icon"
         >
-          ←
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+            <path d="M15 18l-6-6 6-6" />
+          </svg>
         </button>
-        <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+        <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
           {format(currentMonth, 'yyyy年 M月', { locale: zhCN })}
         </span>
         <button
           onClick={() => setCurrentMonth(addMonths(currentMonth, 1))}
-          className="p-1 rounded hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-500 dark:text-zinc-400"
+          className="btn-icon"
         >
-          →
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+            <path d="M9 18l6-6-6-6" />
+          </svg>
         </button>
       </div>
 
       {/* Weekday headers */}
       <div className="grid grid-cols-7 gap-0 px-2 pt-2">
         {weekDays.map((d) => (
-          <div key={d} className="text-center text-[10px] text-zinc-400 dark:text-zinc-500 py-1 font-medium">
+          <div key={d} className="text-center text-[10px] py-1 font-medium" style={{ color: 'var(--text-muted)' }}>
             {d}
           </div>
         ))}
@@ -112,20 +111,35 @@ export default function CalendarView({ onEdit }: { onEdit: (todo: Todo) => void 
             <button
               key={dateStr}
               onClick={() => setSelectedDate(isSelected ? null : dateStr)}
-              className={`h-10 rounded-lg flex flex-col items-center justify-center relative transition-colors
-                ${!isCurrentMonth ? 'opacity-30' : ''}
-                ${today ? 'bg-blue-500/10 font-bold' : ''}
-                ${isSelected ? 'bg-blue-500/20 ring-1 ring-blue-500/50' : 'hover:bg-zinc-100 dark:hover:bg-zinc-800/50'}
-              `}
+              className="h-10 rounded-lg flex flex-col items-center justify-center relative transition-all"
+              style={{
+                opacity: !isCurrentMonth ? 0.3 : 1,
+                background: isSelected
+                  ? 'var(--accent-soft)'
+                  : today
+                    ? 'var(--accent-softer)'
+                    : 'transparent',
+                boxShadow: isSelected ? `inset 0 0 0 1px var(--accent)` : 'none',
+                fontWeight: today ? 700 : 400
+              }}
+              onMouseEnter={(e) => {
+                if (!isSelected && !today) e.currentTarget.style.background = 'var(--accent-softer)'
+              }}
+              onMouseLeave={(e) => {
+                if (!isSelected && !today) e.currentTarget.style.background = 'transparent'
+              }}
             >
-              <span className={`text-xs ${today ? 'text-blue-500 dark:text-blue-400' : 'text-zinc-600 dark:text-zinc-400'}`}>
+              <span
+                className="text-xs"
+                style={{ color: today || isSelected ? 'var(--accent)' : 'var(--text-secondary)' }}
+              >
                 {format(day, 'd')}
               </span>
               {dayTodos.length > 0 && (
                 <div className="flex gap-0.5 mt-0.5">
-                  {featureCount > 0 && <span className="w-1 h-1 rounded-full bg-blue-500" />}
-                  {bugCount > 0 && <span className="w-1 h-1 rounded-full bg-red-500" />}
-                  {optCount > 0 && <span className="w-1 h-1 rounded-full bg-amber-500" />}
+                  {featureCount > 0 && <span className="w-1 h-1 rounded-full" style={{ background: '#3b82f6' }} />}
+                  {bugCount > 0 && <span className="w-1 h-1 rounded-full" style={{ background: '#ef4444' }} />}
+                  {optCount > 0 && <span className="w-1 h-1 rounded-full" style={{ background: '#0d9488' }} />}
                 </div>
               )}
             </button>
@@ -135,35 +149,36 @@ export default function CalendarView({ onEdit }: { onEdit: (todo: Todo) => void 
 
       {/* Selected date tasks */}
       {selectedDate && (
-        <div className="border-t border-zinc-200 dark:border-zinc-800 px-3 py-2 animate-fade-in-up">
-          <div className="text-xs font-medium text-zinc-500 dark:text-zinc-400 mb-1.5">
+        <div
+          className="px-3 py-2 animate-fade-in-up"
+          style={{ borderTop: '1px solid var(--border-subtle)' }}
+        >
+          <div className="text-xs font-medium mb-1.5" style={{ color: 'var(--text-secondary)' }}>
             {format(new Date(selectedDate + 'T00:00:00'), 'M月d日 EEEE', { locale: zhCN })}
-            <span className="ml-1 text-zinc-400 dark:text-zinc-500 font-normal">({selectedTodos.length} 项)</span>
+            <span className="ml-1 font-normal" style={{ color: 'var(--text-muted)' }}>({selectedTodos.length} 项)</span>
           </div>
           {selectedTodos.length === 0 ? (
-            <div className="text-xs text-zinc-400 dark:text-zinc-500 py-2 text-center">当日无任务</div>
+            <div className="text-xs py-2 text-center" style={{ color: 'var(--text-muted)' }}>当日无任务</div>
           ) : (
             <div className="space-y-1">
               {selectedTodos.map((todo) => (
                 <div
                   key={todo.id}
-                  className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800/50 cursor-pointer group"
+                  className="flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer group transition-colors"
                   onClick={() => onEdit(todo)}
+                  style={{ background: 'transparent', opacity: todo.archived ? 0.5 : 1 }}
+                  onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--accent-softer)')}
+                  onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
                 >
-                  <span className={`text-xs ${
-                    todo.status === 'done'
-                      ? 'text-green-400'
-                      : todo.status === 'in_progress'
-                        ? 'text-blue-400'
-                        : 'text-zinc-400 dark:text-zinc-500'
-                  }`}>
+                  <span className="text-xs" style={{
+                    color: todo.status === 'done' ? '#22c55e' : todo.status === 'in_progress' ? '#3b82f6' : 'var(--text-muted)'
+                  }}>
                     {statusIcons[todo.status]}
                   </span>
-                  <span className={`text-xs flex-1 truncate ${
-                    todo.status === 'done'
-                      ? 'line-through text-zinc-400 dark:text-zinc-500'
-                      : 'text-zinc-700 dark:text-zinc-300'
-                  }`}>
+                  <span
+                    className={`text-xs flex-1 truncate ${todo.status === 'done' ? 'line-through' : ''}`}
+                    style={{ color: todo.status === 'done' ? 'var(--text-muted)' : 'var(--text-primary)' }}
+                  >
                     {todo.title}
                   </span>
                   <CategoryBadge category={todo.category} />

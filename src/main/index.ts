@@ -1,7 +1,16 @@
-import { app, shell, BrowserWindow, ipcMain, Tray, Menu, nativeImage, Notification, globalShortcut } from 'electron'
-import { join } from 'path'
+import { app, shell, BrowserWindow, ipcMain, Tray, Menu, nativeImage, Notification, globalShortcut, screen, protocol, net } from 'electron'
+import { join, basename } from 'path'
+import { writeFile, mkdir } from 'fs/promises'
+import { randomUUID } from 'crypto'
+import { pathToFileURL } from 'url'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import Store from 'electron-store'
+
+// Custom protocol for serving locally-stored images via app-image://<filename>
+// Must be registered before app is ready.
+protocol.registerSchemesAsPrivileged([
+  { scheme: 'app-image', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } }
+])
 
 const store = new Store({ name: 'todo-data' })
 
@@ -9,12 +18,42 @@ let mainWindow: BrowserWindow | null = null
 let tray: Tray | null = null
 let isPinned = true // true = floating level (above normal windows, below IME popup), false = sunk to bottom on blur
 
+// ─── Window bounds persistence ───
+let boundsTimer: ReturnType<typeof setTimeout> | null = null
+function saveBounds(): void {
+  if (!mainWindow) return
+  if (boundsTimer) clearTimeout(boundsTimer)
+  boundsTimer = setTimeout(() => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      store.set('windowBounds', mainWindow.getBounds())
+    }
+  }, 500)
+}
+
+function getRestoredBounds(): Electron.Rectangle | null {
+  const saved = store.get('windowBounds') as { x: number; y: number; width: number; height: number } | undefined
+  if (!saved || typeof saved.x !== 'number' || typeof saved.y !== 'number') return null
+  // Require at least 50px of the window to be within a visible display
+  const displays = screen.getAllDisplays()
+  const isVisible = displays.some((d) => {
+    const wa = d.workArea
+    const overlapX = Math.max(0, Math.min(saved.x + saved.width, wa.x + wa.width) - Math.max(saved.x, wa.x))
+    const overlapY = Math.max(0, Math.min(saved.y + saved.height, wa.y + wa.height) - Math.max(saved.y, wa.y))
+    return overlapX >= 50 && overlapY >= 50
+  })
+  return isVisible ? saved : null
+}
+
 function createWindow(): void {
+  const restored = getRestoredBounds()
   mainWindow = new BrowserWindow({
-    width: 400,
-    height: 680,
+    width: restored?.width ?? 400,
+    height: restored?.height ?? 680,
+    x: restored?.x,
+    y: restored?.y,
     minWidth: 320,
     minHeight: 200,
+    show: false, // Don't show until content is ready — prevents white flash
     frame: false,
     alwaysOnTop: true,
     transparent: false,
@@ -22,7 +61,6 @@ function createWindow(): void {
     skipTaskbar: false,
     backgroundColor: '#18181b',
     titleBarStyle: 'hidden',
-    vibrancy: 'under-window',
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false
@@ -37,6 +75,10 @@ function createWindow(): void {
   mainWindow.setAlwaysOnTop(true, 'floating')
   isPinned = true
 
+  // Persist window bounds on move/resize
+  mainWindow.on('move', saveBounds)
+  mainWindow.on('resize', saveBounds)
+
   // Z-axis behavior: focus → top, blur + unpinned → bottom
   mainWindow.on('focus', () => {
     if (!isPinned && mainWindow) {
@@ -49,8 +91,38 @@ function createWindow(): void {
     }
   })
 
-  mainWindow.on('ready-to-show', () => {
-    mainWindow?.show()
+  // Only show window once content has painted — prevents white flash
+  let shown = false
+  const showOnce = (): void => {
+    if (shown || !mainWindow || mainWindow.isDestroyed()) return
+    shown = true
+    mainWindow.show()
+  }
+  mainWindow.on('ready-to-show', showOnce)
+
+  // Failsafe: if the page hasn't triggered ready-to-show within 4s, show anyway
+  // to avoid invisible app. Then reload once if content is still blank.
+  const showTimeout = setTimeout(() => {
+    showOnce()
+    // If we had to force-show, the renderer might be stuck — give it one reload
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.reload()
+    }
+  }, 4000)
+  mainWindow.on('ready-to-show', () => clearTimeout(showTimeout))
+
+  // Auto-reload on renderer crash
+  mainWindow.webContents.on('render-process-gone', () => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.reload()
+    }
+  })
+
+  // Auto-reload on load failure (e.g., asar read error, file not found)
+  mainWindow.webContents.on('did-fail-load', (_e, code, _desc, url) => {
+    if (code !== -3 && mainWindow && !mainWindow.isDestroyed()) { // -3 = aborted (normal)
+      setTimeout(() => mainWindow?.webContents.reload(), 500)
+    }
   })
 
   mainWindow.webContents.setWindowOpenHandler((details) => {
@@ -74,10 +146,12 @@ function createWindow(): void {
 }
 
 function createTray(): void {
-  // Create a simple tray icon (16x16 template image)
+  // macOS template image: black + alpha. macOS auto-renders white/dark
+  // based on menu bar appearance. Using inline base64 to avoid file path issues.
   const icon = nativeImage.createFromDataURL(
-    'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAABHNCSVQICAgIfAhkiAAAADlJREFUOI1jYBhsgJGBgYGBgYEhikSNKHYxMqABRoLqiDaAhRgNuAwgxU5kkwn6gZEYA0Y9MBIBAOYkBBlyzBJnAAAAAElFTkSuQmCC'
+    'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAzklEQVR4nO2WwQ2DMAxFXYsROkKGyBAdlyEyhEfoEBWHSpFLsX/jWEjlX0hE8HuQCJno33NLYKzd+KFvciJ8b06zBczw2c9AC2A8j87AMhm+5f7LF2jduAZIfK3HCXBdp3kPYR2EiqceD0IsuJZIE+gj2QKi5iVTQNAHeDK8RAoI5mPDEQHrVEP7jgoIOIeyONYUEOp++y3eLfAWheCIwLt4iYSjAkOgSIFeQl8p80dURuGWQFRHdFiPkeYhCF69TWmj+Hw0JYwsjoZfOUVeeAofD1N5JmQAAAAASUVORK5CYII='
   )
+  icon.setTemplateImage(true)
   tray = new Tray(icon)
   tray.setToolTip('Todo Desktop')
 
@@ -307,11 +381,13 @@ function buildHighlights(
   return h
 }
 
-function generateWeeklyReport(): WeeklyReportData {
+function generateWeeklyReport(weekOffset = 0): WeeklyReportData {
   const raw = store.store as { todos?: TodoData[] }
   const now = new Date()
-  const weekStart = getMonday(now)
-  const weekEnd = getSunday(now)
+  const target = new Date(now)
+  target.setDate(target.getDate() + weekOffset * 7)
+  const weekStart = getMonday(target)
+  const weekEnd = getSunday(target)
   const weekStartStr = fmtMMDD(weekStart)
   const weekEndStr = fmtMMDD(weekEnd)
 
@@ -338,24 +414,27 @@ function generateWeeklyReport(): WeeklyReportData {
   }
   if (!raw?.todos) return empty
 
-  const todos = raw.todos.filter((t) => !t.archived)
+  const todos = raw.todos ?? []
 
   const inWeek = (isoStr: string): boolean => {
     const d = new Date(isoStr)
     return d.getTime() >= weekStart.getTime() && d.getTime() <= weekEnd.getTime()
   }
 
+  const isPast = weekOffset < 0
   const completed = todos.filter((t) => t.completedAt && inWeek(t.completedAt))
   const created = todos.filter((t) => t.createdAt && inWeek(t.createdAt))
-  const inProgress = todos.filter((t) => t.status === 'in_progress')
+  // For past weeks, "in progress" only makes sense as current state — skip for history
+  const inProgress = isPast ? [] : todos.filter((t) => t.status === 'in_progress')
 
   const todayStr = fmtDate(now)
-  const overdue = todos.filter(
+  // For past weeks, overdue is not meaningful
+  const overdue = isPast ? [] : todos.filter(
     (t) => t.dueDate && t.dueDate < todayStr && t.status !== 'done'
   )
 
-  // Weekly-scoped completion rate: 本周完成 / (本周完成 + 进行中 + 逾期)
-  // This reflects "what fraction of this week's workload is actually done".
+  // Weekly-scoped completion rate: for past weeks, just completed / (completed + created-but-not-completed)
+  // For current week: 本周完成 / (本周完成 + 进行中 + 逾期)
   const denom = completed.length + inProgress.length + overdue.length
   const completionRate = denom > 0 ? Math.round((completed.length / denom) * 100) : 0
 
@@ -570,9 +649,9 @@ function checkWeeklyReport(): void {
   }
 }
 
-// IPC handler for manual report generation
-ipcMain.on('report:generate', () => {
-  const report = generateWeeklyReport()
+// IPC handler for manual report generation (with optional week offset)
+ipcMain.on('report:generate', (_event, weekOffset?: number) => {
+  const report = generateWeeklyReport(weekOffset ?? 0)
   if (mainWindow) {
     mainWindow.webContents.send('report:ready', report)
   }
@@ -607,15 +686,61 @@ function checkDueDateNotifications(): void {
   }
 }
 
+const imagesDir = (): string => join(app.getPath('userData'), 'images')
+
+const MIME_TO_EXT: Record<string, string> = {
+  'image/png': 'png',
+  'image/jpeg': 'jpg',
+  'image/jpg': 'jpg',
+  'image/webp': 'webp',
+  'image/gif': 'gif'
+}
+
+ipcMain.handle('images:save', async (_event, buffer: ArrayBuffer, mime: string) => {
+  const ext = MIME_TO_EXT[mime]
+  if (!ext) throw new Error(`Unsupported image type: ${mime}`)
+  const dir = imagesDir()
+  await mkdir(dir, { recursive: true })
+  const filename = `${randomUUID()}.${ext}`
+  await writeFile(join(dir, filename), Buffer.from(buffer))
+  return filename
+})
+
+ipcMain.handle('images:delete', async (_event, filename: string) => {
+  const safe = basename(filename)
+  if (!safe) return
+  try {
+    const { unlink } = await import('fs/promises')
+    await unlink(join(imagesDir(), safe))
+  } catch {
+    // Ignore — already gone or never existed.
+  }
+})
+
 app.whenReady().then(() => {
   electronApp.setAppUserModelId('com.todo-desktop')
+
+  // Serve app-image://<filename> from userData/images on disk.
+  // basename() strips any path traversal attempts.
+  protocol.handle('app-image', (request) => {
+    try {
+      // URL shape: app-image://<filename> → hostname holds the filename.
+      // basename() strips any traversal/separators as defense in depth.
+      const url = new URL(request.url)
+      const filename = basename(decodeURIComponent(url.hostname))
+      if (!filename) return new Response('Not Found', { status: 404 })
+      return net.fetch(pathToFileURL(join(imagesDir(), filename)).toString())
+    } catch {
+      return new Response('Bad Request', { status: 400 })
+    }
+  })
 
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window)
   })
 
   createWindow()
-  createTray()
+  try { createTray() } catch (_) { /* tray icon failed, app still works */ }
 
   // Register global shortcut: Cmd+Shift+N to quick-add task
   globalShortcut.register('CommandOrControl+Shift+N', () => {

@@ -23,17 +23,28 @@ export default function TodoDateGroup({ date, todos, onEdit, focusedTodoId }: To
   const pendingCount = pendingTodos.length
 
   return (
-    <div className="mb-1">
-      <div className="flex items-center justify-between px-3 py-1.5 bg-zinc-100/50 dark:bg-zinc-800/50 sticky top-0 z-10">
-        <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400">{formatDateHeader(date)}</span>
+    <div className="mb-0.5">
+      <div
+        className="flex items-center justify-between px-3 py-1.5 sticky top-0 z-10"
+        style={{ background: 'var(--bg-elevated)', borderBottom: '1px solid var(--border-subtle)' }}
+      >
+        <div className="flex items-center gap-2">
+          <div className="w-1 h-1 rounded-full" style={{ background: 'var(--accent)', opacity: 0.6 }} />
+          <span className="text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>
+            {formatDateHeader(date)}
+          </span>
+        </div>
         <div className="flex items-center gap-2">
           {pendingCount > 0 && (
-            <span className="text-[10px] text-zinc-400 dark:text-zinc-500">{pendingCount} 项待办</span>
+            <span className="text-[10px]" style={{ color: 'var(--text-muted)' }}>{pendingCount} 项待办</span>
           )}
           {completedTodos.length > 0 && (
             <button
               onClick={() => setHideCompleted(!hideCompleted)}
-              className="text-[10px] text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-400 transition-colors"
+              className="text-[10px] transition-colors"
+              style={{ color: 'var(--text-muted)' }}
+              onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--accent)')}
+              onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--text-muted)')}
             >
               {hideCompleted ? `显示已完成 (${completedTodos.length})` : '隐藏已完成'}
             </button>

@@ -32,32 +32,20 @@ export default function TodoList({ onEdit }: TodoListProps): JSX.Element {
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
   )
 
-  // Apply filters and search (exclude archived by default)
   const filteredTodos = useMemo(() => {
     let result = todos.filter((t) => !t.archived)
-
-    if (filterCategory !== 'all') {
-      result = result.filter((t) => t.category === filterCategory)
-    }
-    if (filterStatus !== 'all') {
-      result = result.filter((t) => t.status === filterStatus)
-    }
-    if (filterTag) {
-      result = result.filter((t) => t.tags?.includes(filterTag))
-    }
+    if (filterCategory !== 'all') result = result.filter((t) => t.category === filterCategory)
+    if (filterStatus !== 'all') result = result.filter((t) => t.status === filterStatus)
+    if (filterTag) result = result.filter((t) => t.tags?.includes(filterTag))
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase()
       result = result.filter(
-        (t) =>
-          t.title.toLowerCase().includes(q) ||
-          t.note?.toLowerCase().includes(q)
+        (t) => t.title.toLowerCase().includes(q) || t.note?.toLowerCase().includes(q)
       )
     }
-
     return result
   }, [todos, filterCategory, filterStatus, filterTag, searchQuery])
 
-  // Group by date, sort within group by order (or priority)
   const groupedByDate = useMemo(() => {
     const groups: Record<string, Todo[]> = {}
     for (const todo of filteredTodos) {
@@ -77,8 +65,6 @@ export default function TodoList({ onEdit }: TodoListProps): JSX.Element {
   const handleDragEnd = (event: DragEndEvent): void => {
     const { active, over } = event
     if (!over || active.id === over.id) return
-
-    // Find which date group the dragged item belongs to
     for (const [date, dateTodos] of groupedByDate) {
       const ids = dateTodos.map((t) => t.id)
       const oldIndex = ids.indexOf(active.id as string)
@@ -95,8 +81,11 @@ export default function TodoList({ onEdit }: TodoListProps): JSX.Element {
 
   if (!loaded) {
     return (
-      <div className="flex items-center justify-center h-32 text-zinc-500 text-sm">
-        加载中...
+      <div className="flex items-center justify-center h-32" style={{ color: 'var(--text-muted)' }}>
+        <div className="flex items-center gap-2">
+          <div className="w-3 h-3 rounded-full animate-pulse" style={{ background: 'var(--accent)', opacity: 0.4 }} />
+          <span className="text-sm">加载中...</span>
+        </div>
       </div>
     )
   }
@@ -104,9 +93,16 @@ export default function TodoList({ onEdit }: TodoListProps): JSX.Element {
   if (filteredTodos.length === 0) {
     const hasFilter = filterCategory !== 'all' || filterStatus !== 'all' || searchQuery.trim()
     return (
-      <div className="flex flex-col items-center justify-center h-48 text-zinc-500">
-        <span className="text-3xl mb-2">{hasFilter ? '🔍' : '✓'}</span>
-        <span className="text-sm">{hasFilter ? '没有匹配的任务' : '暂无任务'}</span>
+      <div className="flex flex-col items-center justify-center h-48" style={{ color: 'var(--text-muted)' }}>
+        <div
+          className="w-10 h-10 rounded-xl flex items-center justify-center mb-3"
+          style={{ background: 'var(--accent-softer)' }}
+        >
+          <span className="text-lg">{hasFilter ? '🔍' : '✓'}</span>
+        </div>
+        <span className="text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>
+          {hasFilter ? '没有匹配的任务' : '暂无任务'}
+        </span>
         <span className="text-xs mt-1">
           {hasFilter ? '尝试调整筛选条件' : '点击下方按钮添加新任务'}
         </span>

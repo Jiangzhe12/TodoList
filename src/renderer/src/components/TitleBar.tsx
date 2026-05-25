@@ -2,29 +2,25 @@ import { useState, useEffect } from 'react'
 import { useTodoStore } from '../store'
 
 interface TitleBarProps {
-  showStats: boolean
-  onToggleStats: () => void
   showFilter: boolean
   onToggleFilter: () => void
   onShowArchive: () => void
-  onArchiveDone: () => void
-  onShowTemplates: () => void
   showCalendar: boolean
   onToggleCalendar: () => void
   onGenerateReport: () => void
+  showMemo: boolean
+  onToggleMemo: () => void
 }
 
 export default function TitleBar({
-  showStats,
-  onToggleStats,
   showFilter,
   onToggleFilter,
   onShowArchive,
-  onArchiveDone,
-  onShowTemplates,
   showCalendar,
   onToggleCalendar,
-  onGenerateReport
+  onGenerateReport,
+  showMemo,
+  onToggleMemo
 }: TitleBarProps): JSX.Element {
   const [pinned, setPinned] = useState(true)
   const { theme, setTheme } = useTodoStore()
@@ -43,43 +39,32 @@ export default function TitleBar({
     setTheme(next)
   }
 
-  const themeIcon = theme === 'dark' ? '🌙' : theme === 'light' ? '☀️' : '💻'
   const themeLabel = theme === 'dark' ? '暗色' : theme === 'light' ? '亮色' : '跟随系统'
 
   return (
-    <div className="flex items-center justify-between h-10 px-3 bg-white dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800 select-none draggable">
+    <div
+      className="flex items-center justify-between h-10 px-3 surface-glass select-none draggable"
+      style={{ borderBottom: '1px solid var(--border-default)' }}
+    >
+      {/* Brand */}
       <div className="flex items-center gap-2">
-        <span className="text-sm font-semibold text-zinc-800 dark:text-zinc-200">Todo Desktop</span>
+        <div className="w-[5px] h-[5px] rounded-full" style={{ background: 'var(--accent)' }} />
+        <span className="text-[13px] font-semibold tracking-tight" style={{ color: 'var(--text-primary)' }}>
+          Todo
+        </span>
       </div>
-      <div className="flex items-center gap-1 no-drag">
-        {/* Stats toggle */}
-        <button
-          onClick={onToggleStats}
-          className={`p-1.5 rounded hover:bg-zinc-100 dark:hover:bg-zinc-700 transition-colors ${showStats ? 'text-green-500 dark:text-green-400' : 'text-zinc-400 dark:text-zinc-500'}`}
-          title="数据统计"
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-            <path d="M18 20V10M12 20V4M6 20v-6" />
-          </svg>
-        </button>
 
-        {/* Filter toggle */}
-        <button
-          onClick={onToggleFilter}
-          className={`p-1.5 rounded hover:bg-zinc-100 dark:hover:bg-zinc-700 transition-colors ${showFilter ? 'text-blue-500 dark:text-blue-400' : 'text-zinc-400 dark:text-zinc-500'}`}
-          title="筛选/搜索 (⌘F)"
-        >
+      {/* Actions */}
+      <div className="flex items-center gap-0.5 no-drag">
+        {/* Filter */}
+        <button onClick={onToggleFilter} className={`btn-icon ${showFilter ? 'active' : ''}`} title="筛选/搜索 (⌘F)">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
             <polygon points="22,3 2,3 10,12.46 10,19 14,21 14,12.46" />
           </svg>
         </button>
 
-        {/* Calendar view */}
-        <button
-          onClick={onToggleCalendar}
-          className={`p-1.5 rounded hover:bg-zinc-100 dark:hover:bg-zinc-700 transition-colors ${showCalendar ? 'text-purple-500 dark:text-purple-400' : 'text-zinc-400 dark:text-zinc-500'}`}
-          title="日历视图"
-        >
+        {/* Calendar */}
+        <button onClick={onToggleCalendar} className={`btn-icon ${showCalendar ? 'active' : ''}`} title="日历视图">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <rect x="3" y="4" width="18" height="18" rx="2" />
             <path d="M16 2v4M8 2v4M3 10h18" />
@@ -87,11 +72,7 @@ export default function TitleBar({
         </button>
 
         {/* Weekly report */}
-        <button
-          onClick={onGenerateReport}
-          className="p-1.5 rounded hover:bg-zinc-100 dark:hover:bg-zinc-700 text-zinc-400 dark:text-zinc-500 hover:text-orange-500 dark:hover:text-orange-400 transition-colors"
-          title="生成周报"
-        >
+        <button onClick={onGenerateReport} className="btn-icon" title="生成周报">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
             <polyline points="14 2 14 8 20 8" />
@@ -101,11 +82,7 @@ export default function TitleBar({
         </button>
 
         {/* Archive view */}
-        <button
-          onClick={onShowArchive}
-          className="p-1.5 rounded hover:bg-zinc-100 dark:hover:bg-zinc-700 text-zinc-400 dark:text-zinc-500 transition-colors"
-          title="查看归档"
-        >
+        <button onClick={onShowArchive} className="btn-icon" title="查看归档">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <rect x="2" y="3" width="20" height="5" rx="1" />
             <path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8" />
@@ -113,46 +90,41 @@ export default function TitleBar({
           </svg>
         </button>
 
-        {/* Templates */}
-        <button
-          onClick={onShowTemplates}
-          className="p-1.5 rounded hover:bg-zinc-100 dark:hover:bg-zinc-700 text-zinc-400 dark:text-zinc-500 transition-colors"
-          title="任务模板"
-        >
+        {/* Memo */}
+        <button onClick={onToggleMemo} className={`btn-icon ${showMemo ? 'active' : ''}`} title="便签">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <rect x="3" y="3" width="18" height="18" rx="2" />
-            <path d="M7 7h10M7 12h10M7 17h6" />
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+            <polyline points="14 2 14 8 20 8" />
+            <line x1="8" y1="13" x2="16" y2="13" />
+            <line x1="8" y1="17" x2="13" y2="17" />
           </svg>
         </button>
 
-        {/* Archive all done */}
-        <button
-          onClick={onArchiveDone}
-          className="p-1.5 rounded hover:bg-zinc-100 dark:hover:bg-zinc-700 text-zinc-400 dark:text-zinc-500 hover:text-green-500 dark:hover:text-green-400 transition-colors"
-          title="归档所有已完成任务"
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
-            <polyline points="22 4 12 14.01 9 11.01" />
-          </svg>
-        </button>
+        {/* Separator */}
+        <div className="w-px h-3.5 mx-0.5" style={{ background: 'var(--border-default)' }} />
 
         {/* Theme toggle */}
-        <button
-          onClick={cycleTheme}
-          className="p-1.5 rounded hover:bg-zinc-100 dark:hover:bg-zinc-700 text-zinc-400 dark:text-zinc-500 transition-colors text-xs"
-          title={`主题: ${themeLabel}`}
-        >
-          {themeIcon}
+        <button onClick={cycleTheme} className="btn-icon" title={`主题: ${themeLabel}`}>
+          {theme === 'dark' ? (
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+            </svg>
+          ) : theme === 'light' ? (
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="5" />
+              <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" />
+            </svg>
+          ) : (
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="2" y="3" width="20" height="14" rx="2" />
+              <path d="M8 21h8M12 17v4" />
+            </svg>
+          )}
         </button>
 
-        {/* Pin toggle */}
-        <button
-          onClick={togglePin}
-          className={`p-1.5 rounded hover:bg-zinc-100 dark:hover:bg-zinc-700 transition-colors ${pinned ? 'text-blue-500 dark:text-blue-400' : 'text-zinc-400 dark:text-zinc-500'}`}
-          title={pinned ? '取消置顶' : '置顶'}
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        {/* Pin */}
+        <button onClick={togglePin} className={`btn-icon ${pinned ? 'active' : ''}`} title={pinned ? '取消置顶' : '置顶'}>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill={pinned ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M9 4v6l-2 4v2h14v-2l-2-4V4" />
             <path d="M12 16v5" />
             <path d="M8 4h8" />
@@ -160,23 +132,15 @@ export default function TitleBar({
         </button>
 
         {/* Minimize */}
-        <button
-          onClick={() => window.api.minimizeWindow()}
-          className="p-1.5 rounded hover:bg-zinc-100 dark:hover:bg-zinc-700 text-zinc-400 transition-colors"
-          title="最小化"
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <button onClick={() => window.api.minimizeWindow()} className="btn-icon" title="最小化">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M5 12h14" />
           </svg>
         </button>
 
-        {/* Close/hide */}
-        <button
-          onClick={() => window.api.closeWindow()}
-          className="p-1.5 rounded hover:bg-red-100 dark:hover:bg-red-900/50 text-zinc-400 hover:text-red-500 dark:hover:text-red-400 transition-colors"
-          title="隐藏到托盘"
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        {/* Close */}
+        <button onClick={() => window.api.closeWindow()} className="btn-icon danger" title="隐藏到托盘">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M18 6L6 18M6 6l12 12" />
           </svg>
         </button>
