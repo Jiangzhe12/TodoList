@@ -2,6 +2,7 @@ import { useEffect, useState, useRef, useCallback, useMemo } from 'react'
 import { Todo, TodoPriority } from './types'
 import { useTodoStore } from './store'
 import { getToday } from './utils/dates'
+import { useImagePaste } from './utils/useImagePaste'
 import TitleBar from './components/TitleBar'
 import FilterBar from './components/FilterBar'
 import TodoList from './components/TodoList'
@@ -25,6 +26,7 @@ export default function App(): JSX.Element {
   const [showForm, setShowForm] = useState(false)
   const [editingTodo, setEditingTodo] = useState<Todo | null>(null)
   const [initialTitle, setInitialTitle] = useState('')
+  const [initialAttachments, setInitialAttachments] = useState<string[]>([])
   const [showFilter, setShowFilter] = useState(false)
   const [showArchive, setShowArchive] = useState(false)
   const [showCalendar, setShowCalendar] = useState(false)
@@ -32,6 +34,18 @@ export default function App(): JSX.Element {
   const [weeklyReport, setWeeklyReport] = useState<import('./types').WeeklyReportData | null>(null)
   const [reportWeekOffset, setReportWeekOffset] = useState(0)
   const [quickTitle, setQuickTitle] = useState('')
+  const [quickAttachments, setQuickAttachments] = useState<string[]>([])
+
+  const { onPaste: onQuickPaste, error: quickPasteError } = useImagePaste({
+    onImage: ({ filename }) => {
+      setQuickAttachments((prev) => [...prev, filename])
+    }
+  })
+
+  const removeQuickAttachment = (f: string): void => {
+    setQuickAttachments((prev) => prev.filter((x) => x !== f))
+    void window.api.deleteImage(f)
+  }
   const lastDateRef = useRef(getToday())
   const searchInputRef = useRef<HTMLInputElement | null>(null)
   const quickInputRef = useRef<HTMLInputElement | null>(null)
@@ -217,6 +231,7 @@ export default function App(): JSX.Element {
     setShowForm(false)
     setEditingTodo(null)
     setInitialTitle('')
+    setInitialAttachments([])
   }
 
   return (
@@ -249,32 +264,80 @@ export default function App(): JSX.Element {
       )}
 
       {/* Quick capture */}
-      <div className="px-3 py-2 flex gap-2 items-center" style={{ borderTop: '1px solid var(--border-subtle)', background: 'var(--bg-surface)' }}>
+      <div
+        className="px-3 py-2 flex flex-col gap-1.5"
+        style={{ borderTop: '1px solid var(--border-subtle)', background: 'var(--bg-surface)' }}
+      >
+        {/* Staged attachments + paste-error row */}
+        {(quickAttachments.length > 0 || quickPasteError) && (
+          <div className="flex items-center gap-1.5 flex-wrap">
+            {quickAttachments.map((f) => (
+              <div
+                key={f}
+                className="relative group/qa rounded overflow-hidden"
+                style={{ width: '28px', height: '28px', border: '1px solid var(--border-default)' }}
+              >
+                <img src={`app-image://${f}`} alt="" className="w-full h-full object-cover" />
+                <button
+                  type="button"
+                  onClick={() => removeQuickAttachment(f)}
+                  className="absolute inset-0 flex items-center justify-center text-[10px] opacity-0 group-hover/qa:opacity-100 transition-opacity"
+                  style={{ background: 'rgba(0,0,0,0.55)', color: '#fff' }}
+                  title="移除"
+                >
+                  ✕
+                </button>
+              </div>
+            ))}
+            {quickPasteError && (
+              <span className="text-[11px]" style={{ color: '#ef4444' }}>
+                {quickPasteError}
+              </span>
+            )}
+          </div>
+        )}
+
+        <div className="flex gap-2 items-center">
         <input
           ref={quickInputRef}
           type="text"
           value={quickTitle}
           onChange={(e) => setQuickTitle(e.target.value)}
+          onPaste={onQuickPaste}
           onKeyDown={(e) => {
-            if (e.key === 'Enter' && !e.nativeEvent.isComposing && quickTitle.trim()) {
+            const hasContent = quickTitle.trim() || quickAttachments.length > 0
+            if (e.key === 'Enter' && !e.nativeEvent.isComposing && hasContent) {
               if (e.shiftKey) {
-                // Shift+Enter: open full form with title pre-filled
+                // Shift+Enter: open full form with title/attachments pre-filled
                 e.preventDefault()
                 setEditingTodo(null)
                 setInitialTitle(quickTitle.trim())
+                setInitialAttachments(quickAttachments)
                 setShowForm(true)
                 setQuickTitle('')
+                setQuickAttachments([])
               } else {
-                // Enter: quick add
+                // Enter: quick add. If no title but has images, use a default.
                 e.preventDefault()
-                addTodo({ title: quickTitle.trim(), category: 'feature', priority: 'medium' })
+                const title = quickTitle.trim() || '截图'
+                addTodo({
+                  title,
+                  category: 'feature',
+                  priority: 'medium',
+                  attachments: quickAttachments.length ? quickAttachments : undefined
+                })
                 setQuickTitle('')
+                setQuickAttachments([])
               }
             }
           }}
           className="input-field flex-1"
           style={{ margin: 0, fontSize: '13px' }}
-          placeholder="快速添加任务… Enter 创建 / Shift+Enter 详细"
+          placeholder={
+            quickAttachments.length > 0
+              ? `${quickAttachments.length} 张图待发 · Enter 直接创建`
+              : '快速添加任务… Enter 创建 / Shift+Enter 详细 / 粘贴图片附加'
+          }
         />
         <button
           onClick={() => {
@@ -302,9 +365,17 @@ export default function App(): JSX.Element {
             <path d="M12 5v14M5 12h14" />
           </svg>
         </button>
+        </div>
       </div>
 
-      {showForm && <TodoForm editingTodo={editingTodo} initialTitle={initialTitle} onClose={handleCloseForm} />}
+      {showForm && (
+        <TodoForm
+          editingTodo={editingTodo}
+          initialTitle={initialTitle}
+          initialAttachments={initialAttachments}
+          onClose={handleCloseForm}
+        />
+      )}
       {showArchive && <ArchiveView onClose={() => setShowArchive(false)} />}
       {weeklyReport && (
         <WeeklyReport

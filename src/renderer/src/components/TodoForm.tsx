@@ -7,6 +7,7 @@ import BugFields from './BugFields'
 interface TodoFormProps {
   editingTodo?: Todo | null
   initialTitle?: string
+  initialAttachments?: string[]
   onClose: () => void
 }
 
@@ -22,7 +23,7 @@ const priorityOptions: { value: TodoPriority; label: string }[] = [
   { value: 'low', label: '低' }
 ]
 
-export default function TodoForm({ editingTodo, initialTitle, onClose }: TodoFormProps): JSX.Element {
+export default function TodoForm({ editingTodo, initialTitle, initialAttachments, onClose }: TodoFormProps): JSX.Element {
   const { addTodo, updateTodo, customTags, addCustomTag } = useTodoStore()
 
   const [title, setTitle] = useState('')
@@ -56,10 +57,11 @@ export default function TodoForm({ editingTodo, initialTitle, onClose }: TodoFor
         setBugCause(editingTodo.bugCause || '')
         setFixPlan(editingTodo.fixPlan || '')
       }
-    } else if (initialTitle) {
-      setTitle(initialTitle)
+    } else {
+      if (initialTitle) setTitle(initialTitle)
+      if (initialAttachments?.length) setAttachments(initialAttachments)
     }
-  }, [editingTodo, initialTitle])
+  }, [editingTodo, initialTitle, initialAttachments])
 
   const handleSubmit = (e: React.FormEvent): void => {
     e.preventDefault()
